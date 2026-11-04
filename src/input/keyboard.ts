@@ -1,9 +1,22 @@
 import { ACTIONS, type Action, type Bindings } from './bindings';
 import { KeyTimeline } from './timeline';
 
-/** 文字入力用の要素から来たイベントか（ゲーム入力として扱わない） */
+/** 文字を打つ種類の input の type（type 省略は text 扱い） */
+const TEXT_INPUT_TYPES = new Set(['', 'text', 'search', 'email', 'number', 'password', 'url', 'tel']);
+
+/**
+ * 文字を打つ欄（とキーで選ぶ select）か。ここから来たキーはゲーム入力として扱わない。
+ * チェックボックスやボタンの input は含めない（クリック後にフォーカスが残るとキーを全部捨ててしまうため）
+ */
+export function isTextEntry(tagName: string, type: string | null, editable: boolean): boolean {
+  if (editable) return true;
+  if (tagName === 'TEXTAREA' || tagName === 'SELECT') return true;
+  if (tagName === 'INPUT') return TEXT_INPUT_TYPES.has((type ?? '').toLowerCase());
+  return false;
+}
+
 function isTextTarget(t: EventTarget | null): boolean {
-  return t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+  return t instanceof HTMLElement && isTextEntry(t.tagName, t.getAttribute('type'), t.isContentEditable);
 }
 
 /** キーボードのイベントを時刻付きで timeline に積み、フレームごとの押下状態を返す */

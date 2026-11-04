@@ -56,6 +56,8 @@ export function createMetricsPanel(root: HTMLElement): MetricsPanel {
 
   let timer: ReturnType<typeof setInterval> | null = null;
   check.addEventListener('change', () => {
+    // フォーカスが残ると、Space を割り当てたときにチェックが切り替わってしまうので外す
+    check.blur();
     body.hidden = !check.checked;
     if (timer !== null) clearInterval(timer);
     timer = null;
