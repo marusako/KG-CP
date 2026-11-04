@@ -74,6 +74,8 @@ export interface ComboPanel {
   readonly step: (history: readonly FrameInput[], frame: number) => void;
   /** 最初の手からやり直す（タブを開いたときなど） */
   readonly reset: () => void;
+  /** 挑戦を無効にして、理由を表示する（処理が止まったときなど） */
+  readonly invalidate: (reason: string) => void;
 }
 
 export function createComboPanel(
@@ -224,6 +226,11 @@ export function createComboPanel(
 
   return {
     reset,
+    invalidate: (reason) => {
+      reset();
+      result.className = 'result ng';
+      result.textContent = reason;
+    },
     step: (history, frame) => {
       const out = stepTrial(state, current, history, frame);
       const prev = state;

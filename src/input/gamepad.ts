@@ -8,6 +8,8 @@ export interface PadState {
   buttons: Record<(typeof BUTTON_NAMES)[number], boolean>;
   /** いま押されているボタン番号（キーコンフィグ用） */
   rawPressed: number[];
+  /** 接続中のパッドの Gamepad.timestamp の最大値（パッドがなければ null。計測用） */
+  timestamp: number | null;
 }
 
 function connectedPads(): Gamepad[] {
@@ -20,7 +22,9 @@ export function readGamepads(bindings: Bindings): PadState {
   const dirs: PressedDirs = { up: false, down: false, left: false, right: false };
   const buttons = { LP: false, MP: false, HP: false, LK: false, MK: false, HK: false };
   const raw = new Set<number>();
+  let timestamp: number | null = null;
   for (const pad of connectedPads()) {
+    timestamp = Math.max(timestamp ?? -Infinity, pad.timestamp);
     const stick = stickToPressed(pad.axes[0] ?? 0, pad.axes[1] ?? 0, DEADZONE);
     dirs.up ||= stick.up || !!pad.buttons[12]?.pressed;
     dirs.down ||= stick.down || !!pad.buttons[13]?.pressed;
@@ -33,5 +37,5 @@ export function readGamepads(bindings: Bindings): PadState {
       if (pad.buttons[bindings.pad[name]]?.pressed) buttons[name] = true;
     }
   }
-  return { dirs, buttons, rawPressed: [...raw] };
+  return { dirs, buttons, rawPressed: [...raw], timestamp };
 }

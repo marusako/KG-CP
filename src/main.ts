@@ -2,28 +2,31 @@ import './ui/style.css';
 import { DEFAULT_COMMANDS } from './core/commands';
 import { analyzeAttempt } from './core/detect';
 import { compressHistory } from './core/history';
+import { createFrameClock, dueFrames, type FrameClock } from './core/clock';
 import type { FrameInput } from './core/types';
 import { BUTTON_NAMES, loadBindings } from './input/bindings';
 import { resolveDirection } from './input/direction';
-import { readGamepads } from './input/gamepad';
+import { readGamepads, type PadState } from './input/gamepad';
 import { KeyboardReader } from './input/keyboard';
 import { SAMPLE_RECIPES } from './core/samples';
 import { createCommandPanel } from './ui/commandPanel';
 import { createComboPanel } from './ui/comboPanel';
 import { createHistoryView } from './ui/historyView';
 import { createKeyConfig } from './ui/keyconfig';
+import { createMetricsPanel } from './ui/metricsPanel';
 
-const FRAME_MS = 1000 / 60;
 const MAX_FRAMES = 600;
 const HISTORY_ROWS = 20;
-/** タブが裏に回ったあとなどで一度に進めるフレーム数の上限 */
-const MAX_CATCHUP = 5;
+/** 一度に進めるフレーム数の上限（0.5 秒）。超えたら処理が止まっていたとみなす */
+const MAX_CATCHUP = 30;
+const STALL_MESSAGE = '処理が止まったため、この挑戦は無効です';
 
 const app = document.getElementById('app');
 if (!app) throw new Error('#app が見つかりません');
 
 const bindings = loadBindings();
 const keyboard = new KeyboardReader(window);
+const metrics = createMetricsPanel(document.body);
 
 const tabBar = document.createElement('nav');
 tabBar.className = 'tabs';
@@ -68,14 +71,30 @@ const history: FrameInput[] = [];
 /** 通算フレーム番号（毎フレーム 1 ずつ増える） */
 let frame = 0;
 let prevPadRaw = new Set<number>();
+let pad: PadState = readGamepads(bindings);
+let lastPadTimestamp: number | null = null;
 
-function stepFrame(): void {
-  const pad = readGamepads(bindings);
+/** パッドを新しく読む。ブラウザでは rAF のときにしか読めない */
+function refreshPad(): void {
+  pad = readGamepads(bindings);
   for (const i of pad.rawPressed) if (!prevPadRaw.has(i)) keyConfig.onPadButton(i);
   prevPadRaw = new Set(pad.rawPressed);
+  metrics.setPadPresent(pad.timestamp !== null);
+  if (pad.timestamp !== null) {
+    if (lastPadTimestamp !== null && pad.timestamp !== lastPadTimestamp) {
+      metrics.onPadInterval(pad.timestamp - lastPadTimestamp);
+    }
+    lastPadTimestamp = pad.timestamp;
+  } else {
+    lastPadTimestamp = null;
+  }
+}
 
+function stepFrame(end: number): void {
   // キーボードとパッドは OR で合成
-  const key = keyboard.read(bindings);
+  const { actions: key, downTimes } = keyboard.sample(end, bindings);
+  const processedAt = performance.now();
+  for (const t of downTimes) metrics.onKeyLatency(processedAt - t);
   const dir = resolveDirection(
     {
       up: key.up || pad.dirs.up,
@@ -99,18 +118,22 @@ function stepFrame(): void {
   renderHistory(compressHistory(history, HISTORY_ROWS));
 }
 
-let last = performance.now();
-let acc = 0;
-function loop(now: number): void {
-  acc += now - last;
-  last = now;
-  let steps = 0;
-  while (acc >= FRAME_MS && steps < MAX_CATCHUP) {
-    stepFrame();
-    acc -= FRAME_MS;
-    steps++;
+let clock: FrameClock | null = null;
+function loop(): void {
+  const now = performance.now();
+  if (clock === null) clock = createFrameClock(now);
+  const due = dueFrames(clock, now, MAX_CATCHUP);
+  clock = due.clock;
+  due.frameEnds.forEach((end, i) => {
+    // パッドは最後のフレームでだけ新しく読み、それより前は前回の状態を使う
+    if (i === due.frameEnds.length - 1) refreshPad();
+    stepFrame(end);
+  });
+  if (due.stalled) {
+    comboPanel.invalidate(STALL_MESSAGE);
+    metrics.onStall();
   }
-  if (steps === MAX_CATCHUP) acc = 0;
+  metrics.onRaf(now, due.frameEnds.length);
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);

@@ -27,3 +27,5 @@ button { background: #2c303a; color: inherit; border: 1px solid #444; border-rad
 .combo-step.drop { border-color: #ff6b6b; color: #ff6b6b; }
 .note.error { color: #ff6b6b; }
 textarea { display: block; margin: 12px 0 8px; background: #15171c; color: inherit; border: 1px solid #444; }
+.metrics { position: fixed; right: 8px; bottom: 8px; font-size: 12px; background: #15171cdd; padding: 6px 8px; border: 1px solid #444; border-radius: 6px; }
+.metrics pre { margin: 6px 0 0; white-space: pre-wrap; }
