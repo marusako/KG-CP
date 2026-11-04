@@ -112,12 +112,12 @@ function updateActiveDevice(wasCapturing: boolean): void {
   }
   keyConfig.update(pad.pads);
 }
-let pad: PadState = readGamepads(bindings);
+let pad: PadState = readGamepads();
 let lastPadTimestamp: number | null = null;
 
 /** パッドを新しく読む。ブラウザでは rAF のときにしか読めない */
 function refreshPad(): void {
-  pad = readGamepads(bindings);
+  pad = readGamepads();
   // この読み取りで捕まえが終わっても、今回の押下はゲームにも操作中のデバイスにも使わない
   const wasCapturing = keyConfig.isCapturing();
   if (wasCapturing) tainting = true;

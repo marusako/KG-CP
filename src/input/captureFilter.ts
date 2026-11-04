@@ -1,4 +1,7 @@
-export type PadDir = 'up' | 'down' | 'left' | 'right';
+import type { DIRECTION_NAMES } from './bindings';
+
+/** 方向の名前は bindings.ts の DIRECTION_NAMES 1 か所で決める */
+export type PadDir = (typeof DIRECTION_NAMES)[number];
 
 export interface RawInput {
   /** このフレームで押されていたキーのコード */

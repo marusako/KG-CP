@@ -1,4 +1,3 @@
-import { BUTTON_NAMES, type Bindings } from './bindings';
 import { stickToPressed, type PressedDirs } from './direction';
 
 const DEADZONE = 0.5;
@@ -18,8 +17,7 @@ export interface PadInfo {
 
 export interface PadState {
   dirs: PressedDirs;
-  buttons: Record<(typeof BUTTON_NAMES)[number], boolean>;
-  /** いま押されているボタン番号（キーコンフィグ用） */
+  /** いま押されているボタン番号。操作への変換は main.ts が今の割り当てで行う */
   rawPressed: number[];
   /** 接続中のパッドの Gamepad.timestamp の最大値（パッドがなければ null。計測用） */
   timestamp: number | null;
@@ -29,13 +27,13 @@ export interface PadState {
 
 function connectedPads(): Gamepad[] {
   if (typeof navigator === 'undefined' || !navigator.getGamepads) return [];
-  return Array.from(navigator.getGamepads()).filter((g): g is Gamepad => g !== null);
+  // 抜いたパッドを null ではなく connected: false で返すブラウザもあるので、両方除く
+  return Array.from(navigator.getGamepads()).filter((g): g is Gamepad => g !== null && g.connected);
 }
 
 /** 接続されている全パッドを OR で合成して読む。十字キー（12-15）と左スティック */
-export function readGamepads(bindings: Bindings): PadState {
+export function readGamepads(): PadState {
   const dirs: PressedDirs = { up: false, down: false, left: false, right: false };
-  const buttons = { LP: false, MP: false, HP: false, LK: false, MK: false, HK: false };
   const raw = new Set<number>();
   const pads: PadInfo[] = [];
   let timestamp: number | null = null;
@@ -56,9 +54,6 @@ export function readGamepads(bindings: Bindings): PadState {
       }
     });
     pads.push({ index: pad.index, id: pad.id, mapping: pad.mapping, pressed, stick: { x: sx, y: sy }, stickDirs: stick });
-    for (const name of BUTTON_NAMES) {
-      if (pad.buttons[bindings.pad[name]]?.pressed) buttons[name] = true;
-    }
   }
-  return { dirs, buttons, rawPressed: [...raw], timestamp, pads };
+  return { dirs, rawPressed: [...raw], timestamp, pads };
 }
