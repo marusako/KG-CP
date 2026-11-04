@@ -33,26 +33,36 @@ function toJson(r: ComboRecipe): string {
   );
 }
 
-function loadSaved(commands: readonly CommandDef[]): ComboRecipe[] {
+interface SavedData {
+  recipes: ComboRecipe[];
+  /** 読めなかった保存データ。消さずに、保存し直すときもそのまま書き戻す */
+  unreadable: unknown[];
+}
+
+function loadSaved(commands: readonly CommandDef[], sampleIds: ReadonlySet<string>): SavedData {
+  const empty: SavedData = { recipes: [], unreadable: [] };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
+    if (!raw) return empty;
     const list: unknown = JSON.parse(raw);
-    if (!Array.isArray(list)) return [];
-    const out: ComboRecipe[] = [];
+    if (!Array.isArray(list)) return empty;
+    const out: SavedData = { recipes: [], unreadable: [] };
     for (const j of list) {
       const r = parseRecipe(j, commands);
-      if (r.ok) out.push(r.recipe);
+      // サンプルと同じ id のものは一覧に2つ並ぶので、読めなかった扱いにする
+      if (r.ok && !sampleIds.has(r.recipe.id)) out.recipes.push(r.recipe);
+      else out.unreadable.push(j);
     }
     return out;
   } catch {
-    return [];
+    return empty;
   }
 }
 
-function save(recipes: readonly ComboRecipe[]): boolean {
+function save(recipes: readonly ComboRecipe[], unreadable: readonly unknown[]): boolean {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(recipes.map((r) => JSON.parse(toJson(r)))));
+    const list = [...recipes.map((r) => JSON.parse(toJson(r)) as unknown), ...unreadable];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
     return true;
   } catch {
     return false;
@@ -97,7 +107,12 @@ export function createComboPanel(
   section.append(title, list, stepsView, result, stats, jsonArea, jsonButtons, message);
   root.append(section);
 
-  const recipes: ComboRecipe[] = [...samples, ...loadSaved(commands)];
+  const saved = loadSaved(commands, new Set(samples.map((s) => s.id)));
+  const recipes: ComboRecipe[] = [...samples, ...saved.recipes];
+  if (saved.unreadable.length > 0) {
+    message.className = 'note error';
+    message.textContent = `読めなかった保存レシピが ${saved.unreadable.length} 件あります（データは消さずに残しています）`;
+  }
   let current = recipes[0] as ComboRecipe;
   let state: TrialState = initialTrialState();
   let attempts = 0;
@@ -187,10 +202,10 @@ export function createComboPanel(
     current = r.recipe;
     attempts = 0;
     completes = 0;
-    const saved = save(recipes.slice(samples.length));
+    const ok = save(recipes.slice(samples.length), saved.unreadable);
     message.className = 'note';
-    message.textContent = saved
-      ? `「${r.recipe.name}」を読み込みました`
+    message.textContent = ok
+      ?`「${r.recipe.name}」を読み込みました`
       : `「${r.recipe.name}」を読み込みました（ブラウザへの保存はできませんでした）`;
     renderStats();
     reset();

@@ -17,16 +17,12 @@ export function justPressedAny(history: readonly FrameInput[], buttons: readonly
   return buttons.some((b) => cur.buttons.includes(b) && !(prev?.buttons.includes(b) ?? false));
 }
 
-function justPressed(history: readonly FrameInput[], def: CommandDef): boolean {
-  return justPressedAny(history, def.buttons);
-}
-
 /**
  * コマンドの成否を判定する。history は古い順で、最後の要素が「いまのフレーム」。
  * いまのフレームで def.buttons が押された瞬間でなければ null。
  */
 export function analyzeAttempt(history: readonly FrameInput[], def: CommandDef): AttemptResult | null {
-  if (!justPressed(history, def)) return null;
+  if (!justPressedAny(history, def.buttons)) return null;
   const b = history.length - 1;
   return def.kind === 'rotation' ? analyzeRotation(history, def, b) : analyzeMotion(history, def, b);
 }
