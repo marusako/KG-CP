@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   initialTrialState,
+  isAttemptInProgress,
   matchesStep,
   parseRecipe,
   stepTrial,
@@ -395,5 +396,36 @@ describe('stepTrial: drop・complete のあと (受け入れ条件 5)', () => {
     expect(out.events[10]).toEqual({ type: 'complete', stepIndex: 1, offset: 10 });
     expect(out.events[12]).toEqual({ type: 'hit', stepIndex: 0, offset: null });
     expect(out.events[22]).toEqual({ type: 'complete', stepIndex: 1, offset: 10 });
+  });
+});
+
+describe('isAttemptInProgress (受け入れ条件 2)', () => {
+  const r2 = recipe(['2LP'], ['2LP', [10, 14]]);
+
+  it('初期状態は false', () => {
+    expect(isAttemptInProgress(initialTrialState())).toBe(false);
+  });
+
+  it('1 手目が成立したあと (hit) は true', () => {
+    const out = run(r2, [N, f(2, 'LP')], 0);
+    expect(out.events[1]).toMatchObject({ type: 'hit' });
+    expect(isAttemptInProgress(out.state)).toBe(true);
+  });
+
+  it('途中の手が成立して続いている間も true', () => {
+    const out = run(r2, timeline(5, { 0: f(2, 'LP') }), 0);
+    expect(isAttemptInProgress(out.state)).toBe(true);
+  });
+
+  it('完走 (complete) のあとは false', () => {
+    const out = run(r2, timeline(11, { 0: f(2, 'LP'), 10: f(2, 'LP') }), 0);
+    expect(out.events[10]).toMatchObject({ type: 'complete' });
+    expect(isAttemptInProgress(out.state)).toBe(false);
+  });
+
+  it('失敗 (drop) のあとは false', () => {
+    const out = run(r2, timeline(16, { 0: f(2, 'LP') }), 0);
+    expect(out.events[15]).toMatchObject({ type: 'drop' });
+    expect(isAttemptInProgress(out.state)).toBe(false);
   });
 });

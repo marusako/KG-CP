@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { compressHistory } from '../src/core/history';
+import { compressHistory, historyAfterStall } from '../src/core/history';
+import { justPressedAny, analyzeAttempt } from '../src/core/detect';
+import { DEFAULT_COMMANDS } from '../src/core/commands';
 import type { Direction, FrameInput } from '../src/core/types';
 
 const f = (dir: Direction, ...buttons: string[]): FrameInput => ({ dir, buttons });
@@ -71,5 +73,53 @@ describe('compressHistory (受け入れ条件 4)', () => {
   it('maxEntries が項目数以上なら全件返す', () => {
     const r = compressHistory([f(1), f(2)], 5);
     expect(r.map((e) => e.dir)).toEqual([2, 1]);
+  });
+});
+
+describe('historyAfterStall (受け入れ条件 1)', () => {
+  const p236 = DEFAULT_COMMANDS.find((c) => c.id === '236P')!;
+
+  it('空の履歴は空の配列', () => {
+    expect(historyAfterStall([])).toEqual([]);
+  });
+
+  it('最後のフレームのボタンだけを残し、方向をニュートラルにした 1 フレームにする', () => {
+    expect(historyAfterStall([f(6), f(2, 'MP'), f(2, 'LP')])).toEqual([f(5, 'LP')]);
+  });
+
+  it('元の配列・フレーム・buttons を変えない。返す値を変えても元に響かない', () => {
+    const last = f(2, 'LP', 'MK');
+    const original = [f(6), last];
+    const snapshot = structuredClone(original);
+    const r = historyAfterStall(original);
+    expect(original).toEqual(snapshot);
+    expect(r).not.toBe(original);
+    expect(r[0]).not.toBe(last);
+    expect(r[0]!.buttons).not.toBe(last.buttons);
+    (r[0]!.buttons as string[]).push('HP');
+    r.push(f(5));
+    expect(original).toEqual(snapshot);
+  });
+
+  it('止まる前の方向が残らず、止まる前の 2 のあとに 3→6→6+LP と入れても 236P は成立しない', () => {
+    const before = [f(5), f(2)];
+    // 対照: 置き換えなしなら成立する
+    const control = analyzeAttempt([...before, f(3), f(6), f(6, 'LP')], p236);
+    expect(control?.ok).toBe(true);
+
+    const after = [...historyAfterStall(before), f(3), f(6), f(6, 'LP')];
+    const r = analyzeAttempt(after, p236);
+    expect(r).not.toBeNull();
+    expect(r?.ok).toBe(false);
+  });
+
+  it('止まる前から押し続けているボタンは、置き換えたあとの最初のフレームで押した瞬間にならない', () => {
+    const replaced = historyAfterStall([f(5), f(5, 'LP')]);
+    expect(justPressedAny([...replaced, f(5, 'LP')], ['LP'])).toBe(false);
+  });
+
+  it('一度離して押し直せば押した瞬間になる', () => {
+    const replaced = historyAfterStall([f(5), f(5, 'LP')]);
+    expect(justPressedAny([...replaced, f(5), f(5, 'LP')], ['LP'])).toBe(true);
   });
 });

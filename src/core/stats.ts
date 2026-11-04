@@ -35,3 +35,34 @@ export class Ring<T> {
     return [...this.items];
   }
 }
+
+/** rAF ごとの「進んだフレーム数」と「前の rAF からの間隔」を、直近 capacity 個まで持つ */
+export class RafMeter {
+  private readonly stepRing: Ring<number>;
+  private readonly intervalRing: Ring<number>;
+  private last: number | null = null;
+
+  constructor(capacity: number) {
+    this.stepRing = new Ring<number>(capacity);
+    this.intervalRing = new Ring<number>(capacity);
+  }
+
+  /** stalled の回は何も記録せず、時刻だけ覚える（次の回の間隔はその時刻との差） */
+  onRaf(now: number, steps: number, stalled: boolean): void {
+    const prev = this.last;
+    this.last = now;
+    if (stalled) return;
+    if (prev !== null) this.intervalRing.push(now - prev);
+    this.stepRing.push(steps);
+  }
+
+  /** 古い順 */
+  steps(): number[] {
+    return this.stepRing.values();
+  }
+
+  /** 古い順。最初の rAF には前がないので、間隔は記録しない */
+  intervals(): number[] {
+    return this.intervalRing.values();
+  }
+}

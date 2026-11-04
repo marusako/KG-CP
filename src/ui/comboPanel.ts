@@ -1,4 +1,4 @@
-import { initialTrialState, parseRecipe, stepTrial } from '../core/combo';
+import { initialTrialState, isAttemptInProgress, parseRecipe, stepTrial } from '../core/combo';
 import type { ComboRecipe, TrialEvent, TrialState } from '../core/combo';
 import type { CommandDef, FrameInput } from '../core/types';
 
@@ -74,7 +74,7 @@ export interface ComboPanel {
   readonly step: (history: readonly FrameInput[], frame: number) => void;
   /** 最初の手からやり直す（タブを開いたときなど） */
   readonly reset: () => void;
-  /** 挑戦を無効にして、理由を表示する（処理が止まったときなど） */
+  /** 挑戦の途中なら、最初の手に戻して理由を表示する（処理が止まったときなど）。途中でなければ何もしない */
   readonly invalidate: (reason: string) => void;
 }
 
@@ -227,6 +227,7 @@ export function createComboPanel(
   return {
     reset,
     invalidate: (reason) => {
+      if (!isAttemptInProgress(state)) return;
       reset();
       result.className = 'result ng';
       result.textContent = reason;

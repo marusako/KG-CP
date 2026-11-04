@@ -37,3 +37,13 @@ export function compressHistory(history: readonly FrameInput[], maxEntries: numb
   }
   return entries.reverse().slice(0, Math.max(0, maxEntries));
 }
+
+/**
+ * 停止を検出したとき、入力履歴をこれに置き換える。
+ * 最後のフレームのボタンだけを残し、方向はニュートラル（5）にする。
+ * ボタンを残すのは、押し続けているボタンが止まったあとに「新しく押した」扱いにならないようにするため。
+ */
+export function historyAfterStall(history: readonly FrameInput[]): FrameInput[] {
+  const last = history[history.length - 1];
+  return last ? [{ dir: 5, buttons: [...last.buttons] }] : [];
+}

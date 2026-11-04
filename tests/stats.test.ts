@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Ring, histogram, summarize } from '../src/core/stats';
+import { RafMeter, Ring, histogram, summarize } from '../src/core/stats';
 
 describe('summarize (受け入れ条件 6)', () => {
   it('空配列は null', () => {
@@ -69,5 +69,56 @@ describe('Ring (受け入れ条件 6)', () => {
     const r = new Ring<string>(2);
     ['a', 'b', 'c', 'd', 'e'].forEach((v) => r.push(v));
     expect(r.values()).toEqual(['d', 'e']);
+  });
+});
+
+describe('RafMeter (受け入れ条件 3)', () => {
+  it('最初の onRaf は間隔を記録せず、フレーム数だけ記録する', () => {
+    const m = new RafMeter(5);
+    m.onRaf(1000, 1, false);
+    expect(m.intervals()).toEqual([]);
+    expect(m.steps()).toEqual([1]);
+  });
+
+  it('2 回目から前の回との差を古い順に記録する', () => {
+    const m = new RafMeter(5);
+    m.onRaf(1000, 1, false);
+    m.onRaf(1016, 1, false);
+    m.onRaf(1050, 2, false);
+    expect(m.intervals()).toEqual([16, 34]);
+    expect(m.steps()).toEqual([1, 1, 2]);
+  });
+
+  it('stalled の回は間隔もフレーム数も記録しない', () => {
+    const m = new RafMeter(5);
+    m.onRaf(1000, 1, false);
+    m.onRaf(3000, 0, true);
+    expect(m.intervals()).toEqual([]);
+    expect(m.steps()).toEqual([1]);
+  });
+
+  it('停止の次の回の間隔は、停止した回の時刻との差で記録する', () => {
+    const m = new RafMeter(5);
+    m.onRaf(1000, 1, false);
+    m.onRaf(3000, 0, true);
+    m.onRaf(3017, 1, false);
+    expect(m.intervals()).toEqual([17]);
+    expect(m.steps()).toEqual([1, 1]);
+  });
+
+  it('最初の回が stalled でも、次の回の間隔はその時刻との差になる', () => {
+    const m = new RafMeter(5);
+    m.onRaf(500, 0, true);
+    m.onRaf(516, 1, false);
+    expect(m.intervals()).toEqual([16]);
+    expect(m.steps()).toEqual([1]);
+  });
+
+  it('capacity を超えたら古いものから消える (steps と intervals の両方)', () => {
+    const m = new RafMeter(3);
+    for (let i = 0; i < 6; i++) m.onRaf(1000 + i * 10 + i * i, i, false);
+    // 時刻: 1000,1011,1024,1039,1056,1075 → 間隔: 11,13,15,17,19
+    expect(m.steps()).toEqual([3, 4, 5]);
+    expect(m.intervals()).toEqual([15, 17, 19]);
   });
 });

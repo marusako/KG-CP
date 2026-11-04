@@ -1,7 +1,7 @@
 import './ui/style.css';
 import { DEFAULT_COMMANDS } from './core/commands';
 import { analyzeAttempt } from './core/detect';
-import { compressHistory } from './core/history';
+import { compressHistory, historyAfterStall } from './core/history';
 import { createFrameClock, dueFrames, type FrameClock } from './core/clock';
 import type { FrameInput } from './core/types';
 import { dropDisconnected, nextActiveDevice, type Device } from './input/activeDevice';
@@ -184,10 +184,13 @@ function loop(): void {
     stepFrame(end);
   });
   if (due.stalled) {
+    // 止まる前後の入力がつながって判定されないよう、履歴を置き換える（同じ配列を使い回す）
+    history.splice(0, history.length, ...historyAfterStall(history));
+    renderHistory(compressHistory(history, HISTORY_ROWS));
     comboPanel.invalidate(STALL_MESSAGE);
     metrics.onStall();
   }
-  metrics.onRaf(now, due.frameEnds.length);
+  metrics.onRaf(now, due.frameEnds.length, due.stalled);
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);

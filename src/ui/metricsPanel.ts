@@ -1,8 +1,8 @@
-import { histogram, Ring, summarize } from '../core/stats';
+import { histogram, RafMeter, Ring, summarize } from '../core/stats';
 
 export interface MetricsPanel {
-  /** rAF ごとに呼ぶ。now は performance.now()、steps はその rAF で進めたフレーム数 */
-  readonly onRaf: (now: number, steps: number) => void;
+  /** rAF ごとに呼ぶ。now は performance.now()、steps はその rAF で進めたフレーム数、stalled は停止を検出した回か */
+  readonly onRaf: (now: number, steps: number, stalled: boolean) => void;
   /** keydown から判定までの遅れ（ms） */
   readonly onKeyLatency: (ms: number) => void;
   /** Gamepad.timestamp が変わったときの差（ms） */
@@ -25,19 +25,18 @@ export function createMetricsPanel(root: HTMLElement): MetricsPanel {
   box.append(label, body);
   root.append(box);
 
-  const steps = new Ring<number>(600);
-  const intervals = new Ring<number>(600);
+  const raf = new RafMeter(600);
   const keyLat = new Ring<number>(60);
   const padInt = new Ring<number>(60);
-  let lastRaf: number | null = null;
   let stalls = 0;
   let padPresent = false;
 
   const render = () => {
-    const h = histogram(steps.values(), 4);
-    const total = steps.values().length;
+    const stepValues = raf.steps();
+    const h = histogram(stepValues, 4);
+    const total = stepValues.length;
     const pct = (i: number) => (total === 0 ? '-' : `${Math.round(((h[i] ?? 0) / total) * 100)}%`);
-    const iv = summarize(intervals.values());
+    const iv = summarize(raf.intervals());
     const k = summarize(keyLat.values());
     const p = summarize(padInt.values());
     const lines = [
@@ -69,11 +68,7 @@ export function createMetricsPanel(root: HTMLElement): MetricsPanel {
   });
 
   return {
-    onRaf: (now, n) => {
-      if (lastRaf !== null) intervals.push(now - lastRaf);
-      lastRaf = now;
-      steps.push(n);
-    },
+    onRaf: (now, n, stalled) => raf.onRaf(now, n, stalled),
     onKeyLatency: (ms) => keyLat.push(ms),
     onPadInterval: (ms) => padInt.push(ms),
     onStall: () => {

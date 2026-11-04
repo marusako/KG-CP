@@ -86,6 +86,11 @@ export function initialTrialState(): TrialState {
   return { stepIndex: 0, lastPressFrame: null };
 }
 
+/** 最初の手が成立し、まだ完走も失敗もしていないとき true */
+export function isAttemptInProgress(state: TrialState): boolean {
+  return state.stepIndex > 0;
+}
+
 /** 1フレーム進める。frame はいまの通算フレーム番号。history の最後がいまのフレーム。 */
 export function stepTrial(
   state: TrialState,
