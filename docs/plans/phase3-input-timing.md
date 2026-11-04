@@ -39,7 +39,7 @@ export const FRAME_MS: number; // 1000 / 60
 /** フレーム n は [origin + n*FRAME_MS, origin + (n+1)*FRAME_MS) の時間。next は次に進めるフレームの番号 */
 export interface FrameClock { readonly origin: number; readonly next: number; }
 
-/** 最初の rAF の時刻から時計を作る。境目が rAF の時刻から遠くなるよう、origin = firstNow - FRAME_MS / 2、next = 0 */
+/** 最初の rAF の時刻から時計を作る。origin = firstNow - PHASE_LEAD_MS、next = 0（「変更 1」を参照） */
 export function createFrameClock(firstNow: number): FrameClock;
 
 /** フレーム n の終わりの時刻 = origin + (n + 1) * FRAME_MS */
@@ -138,6 +138,15 @@ export class Ring<T> {
 6. `summarize`・`histogram`・`Ring` が上の定義どおりに動く
 7. 既存のテストがすべて通ったまま、`npm test`・`npm run typecheck`・`npm run build` が終了コード 0
 8. ブラウザで「計測」をオンにすると各項目が表示される（開発者が手で確認）
+
+## 変更 1（レビュー後: 境目の位置）
+
+理由: 境目を rAF と rAF の真ん中に置くと、フレームが終わってから処理されるまでに半フレームかかる。そのぶん、画面に出るまでの遅れが平均で約 0.5F 増えていた（レビューでの計算による）。キーは時刻で割り振るので、rAF の揺れで 0→2 フレームが出ても判定はズレない。よって、境目を真ん中に置いて揺れを避ける必要は薄い。
+
+- `export const PHASE_LEAD_MS = 2` を足す
+- `createFrameClock(firstNow)` は `origin = firstNow - PHASE_LEAD_MS`、`next = 0`。これで境目は rAF の時刻（`firstNow + k * FRAME_MS`）の 2ms 手前に来る
+- 代わりに起きること: rAF の揺れが 2ms を超える環境では 0→2 フレームが出やすくなる。そのあいだ、パッドは実質 30Hz で読まれる（パッドは rAF でしか読めないため）。計測パネルの「1回の描画で進んだフレーム数」で頻度を確かめる
+- メモ: 画面が 60.000Hz ちょうどでない（59.94Hz など）と、境目が少しずつずれて rAF の時刻を横切り、0→2 フレームが出る期間ができる。キーボードには影響しない。パッドの読み取りの精度はデスクトップ化（Rust 側で時刻付きで読む）で解決する
 
 ## この段階でやらないこと
 

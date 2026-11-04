@@ -1,15 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { FRAME_MS, createFrameClock, dueFrames, frameEnd } from '../src/core/clock';
+import { FRAME_MS, PHASE_LEAD_MS, createFrameClock, dueFrames, frameEnd } from '../src/core/clock';
 
 describe('clock (受け入れ条件 1)', () => {
   it('FRAME_MS は 1000/60', () => {
     expect(FRAME_MS).toBeCloseTo(1000 / 60, 10);
   });
 
-  it('createFrameClock は origin = firstNow - FRAME_MS/2、next = 0', () => {
+  it('PHASE_LEAD_MS は 2', () => {
+    expect(PHASE_LEAD_MS).toBe(2);
+  });
+
+  it('createFrameClock は origin = firstNow - PHASE_LEAD_MS、next = 0', () => {
     const c = createFrameClock(1000);
-    expect(c.origin).toBeCloseTo(1000 - FRAME_MS / 2, 10);
+    expect(c.origin).toBeCloseTo(1000 - PHASE_LEAD_MS, 10);
     expect(c.next).toBe(0);
+  });
+
+  it('境目は rAF の時刻（firstNow + k*FRAME_MS）の PHASE_LEAD_MS 手前に来る', () => {
+    const c = createFrameClock(1000);
+    for (const k of [1, 2, 60, 600]) {
+      expect(frameEnd(c, k - 1)).toBeCloseTo(1000 + k * FRAME_MS - PHASE_LEAD_MS, 6);
+    }
   });
 
   it('frameEnd は origin + (n+1)*FRAME_MS', () => {

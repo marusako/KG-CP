@@ -6,9 +6,16 @@ export interface FrameClock {
   readonly next: number;
 }
 
-/** 最初の rAF の時刻から時計を作る。境目が rAF の時刻から遠くなるよう半フレームずらす */
+/**
+ * フレームの境目を rAF の時刻より何 ms 手前に置くか。
+ * 小さいほど、フレームが終わってから処理するまでの遅れが短い。
+ * rAF の揺れで境目を越えると 0→2 フレームが出るが、キーは時刻で割り振るので判定はズレない
+ */
+export const PHASE_LEAD_MS = 2;
+
+/** 最初の rAF の時刻から時計を作る。境目が rAF の時刻の PHASE_LEAD_MS 手前に来るようにする */
 export function createFrameClock(firstNow: number): FrameClock {
-  return { origin: firstNow - FRAME_MS / 2, next: 0 };
+  return { origin: firstNow - PHASE_LEAD_MS, next: 0 };
 }
 
 /** フレーム n の終わりの時刻 */
