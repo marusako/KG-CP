@@ -12,12 +12,20 @@ import { readGamepads, type PadInfo, type PadState } from './input/gamepad';
 import { KeyboardReader } from './input/keyboard';
 import { detectPadFamily } from './input/padLayout';
 import { SAMPLE_RECIPES } from './core/samples';
+import type { GameId } from './core/games';
+import { NO_MENU_BUTTONS, menuActions, type MenuAction, type MenuButtons } from './core/menu';
+import { DEFAULT_SETTINGS, parseSettings, serializeSettings, type Settings } from './core/settings';
 import { createCommandPanel } from './ui/commandPanel';
 import { createComboPanel } from './ui/comboPanel';
 import { createHistoryView } from './ui/historyView';
 import { createKeyConfig } from './ui/keyconfig';
 import { createMetricsPanel } from './ui/metricsPanel';
+import { createGameBar, createScreens, type Screen } from './ui/screens';
 
+const SETTINGS_KEY = 'kgcp.settings';
+/** パッドのメニュー操作に使うボタン（下のボタンが決定、右のボタンが戻る） */
+const PAD_CONFIRM = 0;
+const PAD_BACK = 1;
 const MAX_FRAMES = 600;
 const HISTORY_ROWS = 20;
 /** 一度に進めるフレーム数の上限（0.5 秒）。超えたら処理が止まっていたとみなす */
@@ -31,18 +39,44 @@ const bindings = loadBindings();
 const keyboard = new KeyboardReader(window);
 const metrics = createMetricsPanel(document.body);
 
+function loadSettings(): Settings {
+  try {
+    return parseSettings(localStorage.getItem(SETTINGS_KEY));
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+function saveSettings(s: Settings): void {
+  try {
+    localStorage.setItem(SETTINGS_KEY, serializeSettings(s));
+  } catch {
+    // localStorage が使えなくても動作は続ける
+  }
+}
+
+let settings = loadSettings();
+
+/** 練習画面（game のときだけ見せる）。レイアウトに影響しないよう display: contents で包む */
+const gameRoot = document.createElement('div');
+gameRoot.className = 'game-root';
+app.append(gameRoot);
+
+const gameBar = createGameBar(gameRoot, () => {
+  screens.show('title');
+});
 const tabBar = document.createElement('nav');
 tabBar.className = 'tabs';
-app.append(tabBar);
-const renderHistory = createHistoryView(app);
+gameRoot.append(tabBar);
+const renderHistory = createHistoryView(gameRoot);
 const practicePane = document.createElement('div');
 practicePane.className = 'tab-pane';
 const comboPane = document.createElement('div');
 comboPane.className = 'tab-pane';
-app.append(practicePane, comboPane);
+gameRoot.append(practicePane, comboPane);
 const panel = createCommandPanel(practicePane, DEFAULT_COMMANDS);
 const comboPanel = createComboPanel(comboPane, DEFAULT_COMMANDS, SAMPLE_RECIPES);
-const keyConfig = createKeyConfig(app, bindings, keyboard);
+const keyConfig = createKeyConfig(gameRoot, bindings, keyboard);
 
 type Tab = 'practice' | 'combo';
 let activeTab: Tab = 'practice';
@@ -70,6 +104,36 @@ function showTab(): void {
 tabBar.append(...tabButtons);
 showTab();
 
+const screens = createScreens(app, {
+  getSettings: () => settings,
+  onVolume: (volume) => {
+    settings = { ...settings, volume };
+    saveSettings(settings);
+  },
+  onSelectGame: (id: GameId) => {
+    settings = { ...settings, lastGame: id };
+    saveSettings(settings);
+    gameBar.setGame(id);
+  },
+  onScreen: (screen: Screen, prev: Screen) => {
+    gameRoot.hidden = screen !== 'game';
+    if (screen === 'game' || prev === 'game') {
+      // 練習の途中の状態は捨てる
+      comboPanel.reset();
+    }
+    // 練習の途中で出たとき、キーコンフィグの捕まえを何も変えずに終える
+    if (prev === 'game') keyConfig.cancel();
+    if (screen === 'game') {
+      // 決定に使った入力を押したまま入っても、離すまで練習の入力にしない。
+      // 入った時刻より後に終わるフレームを 1 つ処理するまでは、捕まえ中として扱う
+      taintSince = performance.now();
+      // 前の練習の入力が残らないよう、履歴をニュートラルの 1 フレームにする
+      history.splice(0, history.length, { dir: 5, buttons: [] });
+    }
+  },
+});
+gameRoot.hidden = true;
+
 const history: FrameInput[] = [];
 /** 通算フレーム番号（毎フレーム 1 ずつ増える） */
 let frame = 0;
@@ -78,9 +142,36 @@ let prevPadRaw = new Set<number>();
 const prevPadInputs = new Map<number, Set<string>>();
 /** 捕まえ中（と終わった直後）に押していた入力。離すまでゲームの入力に使わない */
 let ignore: IgnoreSet = emptyIgnore();
-/** 捕まえが終わったフレームも、押していた入力がゲームに漏れないよう捕まえ中として扱う */
-let tainting = false;
+/**
+ * game に入った時刻。決定に使った入力を押したまま入っても練習に漏れないよう、
+ * frameEnd がこの時刻より後のフレームを 1 つ処理し終えるまで捕まえ中として扱う。null なら不要
+ */
+let taintSince: number | null = null;
+/** 前に見たときキーコンフィグが捕まえ中だった。終わったのを見つけたフレームを捕まえ中として扱うため */
+let capturePending = false;
 let activeDevice: Device = { kind: 'keyboard' };
+/** 前回のパッドのメニュー操作の状態。押した瞬間の取り出し用 */
+let prevMenuPad: MenuButtons = NO_MENU_BUTTONS;
+
+/** メニューのキーボード操作。方向はキーコンフィグの割り当ても使う */
+function menuActionForKey(e: KeyboardEvent): MenuAction | null {
+  if (e.code === 'Enter' || e.code === 'NumpadEnter') return 'confirm';
+  if (e.code === 'Escape') return 'back';
+  if (e.code === 'ArrowUp' || e.code === bindings.keys.up) return 'up';
+  if (e.code === 'ArrowDown' || e.code === bindings.keys.down) return 'down';
+  if (e.code === 'ArrowLeft' || e.code === bindings.keys.left) return 'left';
+  if (e.code === 'ArrowRight' || e.code === bindings.keys.right) return 'right';
+  return null;
+}
+
+window.addEventListener('keydown', (e) => {
+  if (screens.current() === 'game' || e.repeat) return;
+  const action = menuActionForKey(e);
+  if (action === null) return;
+  // フォーカスしたボタンが Enter で押されたり、Esc が別の動きをしたりしないようにする
+  if (action === 'confirm' || action === 'back') e.preventDefault();
+  screens.act(action);
+});
 
 function padInputs(p: PadInfo): Set<string> {
   const s = new Set(p.pressed.map((i) => `b${i}`));
@@ -120,9 +211,23 @@ function refreshPad(): void {
   pad = readGamepads();
   // この読み取りで捕まえが終わっても、今回の押下はゲームにも操作中のデバイスにも使わない
   const wasCapturing = keyConfig.isCapturing();
-  if (wasCapturing) tainting = true;
-  for (const i of pad.rawPressed) if (!prevPadRaw.has(i)) keyConfig.onPadButton(i);
+  if (wasCapturing) capturePending = true;
+  // 練習以外の画面のボタンは、キーコンフィグの割り当てに使わない
+  if (screens.current() === 'game') {
+    for (const i of pad.rawPressed) if (!prevPadRaw.has(i)) keyConfig.onPadButton(i);
+  }
   prevPadRaw = new Set(pad.rawPressed);
+  const menuNow: MenuButtons = {
+    up: pad.dirs.up,
+    down: pad.dirs.down,
+    left: pad.dirs.left,
+    right: pad.dirs.right,
+    confirm: pad.rawPressed.includes(PAD_CONFIRM),
+    back: pad.rawPressed.includes(PAD_BACK),
+  };
+  const menuPressed = menuActions(prevMenuPad, menuNow);
+  prevMenuPad = menuNow;
+  if (screens.current() !== 'game') screens.actAll(menuPressed);
   updateActiveDevice(wasCapturing);
   metrics.setPadPresent(pad.timestamp !== null);
   if (pad.timestamp !== null) {
@@ -143,6 +248,11 @@ function stepFrame(end: number): void {
   for (const t of downTimes) metrics.onKeyLatency(processedAt - t);
   // キーコンフィグで入力待ちの間と、その間に押していた入力を離すまでは、ゲームの入力に使わない
   const capturing = keyConfig.isCapturing();
+  // 捕まえが終わったのを見つけたフレームだけ、捕まえ中として扱う。
+  // キーで終えた場合、そのキーは captureNext が受け取るので timeline に入らず、
+  // パッドで終えた場合も、そのボタンはこのフレームに出る。だから 1 フレームで足りる
+  const justEndedCapture = !capturing && capturePending;
+  capturePending = capturing;
   const filtered = filterInput(
     {
       keys: pressed,
@@ -151,10 +261,10 @@ function stepFrame(end: number): void {
       padDirs: new Set<PadDir>(DIRECTION_NAMES.filter((d) => pad.dirs[d])),
     },
     ignore,
-    capturing || tainting,
+    capturing || justEndedCapture || taintSince !== null || screens.current() !== 'game',
   );
   ignore = filtered.ignore;
-  if (!capturing) tainting = false;
+  if (!capturing && taintSince !== null && end > taintSince) taintSince = null;
   const { input } = filtered;
   const on = (d: PadDir): boolean => input.keys.has(bindings.keys[d]) || input.padDirs.has(d);
   const dir = resolveDirection({ up: on('up'), down: on('down'), left: on('left'), right: on('right') }, 'neutral');

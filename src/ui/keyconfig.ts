@@ -18,6 +18,8 @@ export interface KeyConfig {
   readonly update: (pads: readonly PadInfo[]) => void;
   /** 一括設定中か個別の入力待ち中か（その間の入力はゲームに使わない） */
   readonly isCapturing: () => boolean;
+  /** 入力待ち・一括設定を、割り当てを変えずに終える（表示も元に戻す）。捕まえ中でなければ何もしない */
+  readonly cancel: () => void;
 }
 
 type ViewMode = 'auto' | WizardTarget;
@@ -224,6 +226,7 @@ export function createKeyConfig(root: HTMLElement, bindings: Bindings, keyboard:
   };
 
   const cancel = (): void => {
+    if (!capturing()) return;
     stopCapture();
     say(GUIDE);
     render();
@@ -349,5 +352,6 @@ export function createKeyConfig(root: HTMLElement, bindings: Bindings, keyboard:
       if (viewKind() === 'pad') paintPressed();
     },
     isCapturing: capturing,
+    cancel,
   };
 }

@@ -49,3 +49,21 @@ button { background: #2c303a; color: inherit; border: 1px solid #444; border-rad
 textarea { display: block; margin: 12px 0 8px; background: #15171c; color: inherit; border: 1px solid #444; }
 .metrics { position: fixed; right: 8px; bottom: 8px; font-size: 12px; background: #15171cdd; padding: 6px 8px; border: 1px solid #444; border-radius: 6px; }
 .metrics pre { margin: 6px 0 0; white-space: pre-wrap; }
+.game-root { display: contents; }
+.game-root[hidden] { display: none; }
+.game-bar { flex-basis: 100%; display: flex; gap: 12px; align-items: center; }
+.screens { width: 100%; display: flex; justify-content: center; }
+.screens[hidden] { display: none; }
+.screen { width: 420px; max-width: 100%; text-align: center; }
+.screen[hidden] { display: none; }
+.screen-title { font-size: 32px; margin: 32px 0 24px; }
+.menu { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.menu-item { font-size: 18px; padding: 12px 16px; border: 2px solid #444; text-align: center; }
+.menu-item.cursor { border-color: #ffd166; background: #3a5a9a; }
+.menu-item:disabled { color: #666; cursor: not-allowed; background: #1f222a; }
+.volume-row { display: flex; gap: 12px; align-items: center; background: #2c303a; border-radius: 4px; }
+.volume-row input { flex: 1; }
+.volume-value { min-width: 3ch; text-align: right; font-variant-numeric: tabular-nums; }
+.menu-back { margin-top: 8px; }
+.screen p { margin: 12px 0; }
+.screen a { color: #7fd1ff; }
