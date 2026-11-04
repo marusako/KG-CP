@@ -167,3 +167,53 @@ describe('KeyTimeline 並び順 (受け入れ条件 5)', () => {
     expect(arr(t.sample(33.33))).toEqual(['KeyA', 'KeyB']);
   });
 });
+
+describe('KeyTimeline.sampleDetailed (受け入れ条件 9)', () => {
+  it('押されていない状態からの down は fresh に入る', () => {
+    const t = new KeyTimeline();
+    t.push(down('KeyA', 5));
+    const r = t.sampleDetailed(16.67);
+    expect(arr(r.pressed)).toEqual(['KeyA']);
+    expect(arr(r.fresh)).toEqual(['KeyA']);
+  });
+
+  it('キーリピートの down（すでに押している状態での down）は fresh に入らない', () => {
+    const t = new KeyTimeline();
+    t.push(down('KeyA', 5));
+    t.sampleDetailed(16.67);
+    t.push(down('KeyA', 20));
+    const r = t.sampleDetailed(33.33);
+    expect(arr(r.pressed)).toEqual(['KeyA']);
+    expect(arr(r.fresh)).toEqual([]);
+  });
+
+  it('押しっぱなしの次のフレームは fresh が空', () => {
+    const t = new KeyTimeline();
+    t.push(down('KeyA', 5));
+    t.sampleDetailed(16.67);
+    const r = t.sampleDetailed(33.33);
+    expect(arr(r.pressed)).toEqual(['KeyA']);
+    expect(arr(r.fresh)).toEqual([]);
+  });
+
+  it('フレーム内タップ（down → up）は fresh に入る', () => {
+    const t = new KeyTimeline();
+    t.push(down('KeyA', 3));
+    t.push(up('KeyA', 8));
+    const r = t.sampleDetailed(16.67);
+    expect(arr(r.fresh)).toEqual(['KeyA']);
+  });
+
+  it('pressed は sample と同じ結果になる', () => {
+    const events = [down('KeyA', 5), down('KeyB', 25), up('KeyA', 30), down('KeyA', 40), down('KeyA', 45), up('KeyB', 50)];
+    const a = new KeyTimeline();
+    const b = new KeyTimeline();
+    for (const e of events) {
+      a.push(e);
+      b.push(e);
+    }
+    for (const end of [16.67, 33.33, 50, 66.67]) {
+      expect(arr(b.sampleDetailed(end).pressed)).toEqual(arr(a.sample(end)));
+    }
+  });
+});

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nextActiveDevice, type Device } from '../src/input/activeDevice';
+import { dropDisconnected, nextActiveDevice, type Device } from '../src/input/activeDevice';
 
 const kb: Device = { kind: 'keyboard' };
 const pad0: Device = { kind: 'pad', index: 0, id: 'Pad A', family: 'xbox' };
@@ -30,5 +30,21 @@ describe('nextActiveDevice (受け入れ条件 4)', () => {
 
   it('index が違うパッドどうしは別のデバイス', () => {
     expect(nextActiveDevice(pad0, [pad1])).toBe(pad1);
+  });
+});
+
+describe('dropDisconnected (受け入れ条件 10)', () => {
+  it('キーボードはそのまま（同じ参照）', () => {
+    expect(dropDisconnected(kb, [])).toBe(kb);
+    expect(dropDisconnected(kb, [0, 1])).toBe(kb);
+  });
+
+  it('つながっているパッドはそのまま（同じ参照）', () => {
+    expect(dropDisconnected(pad1, [0, 1])).toBe(pad1);
+  });
+
+  it('抜けたパッドは { kind: keyboard } になる', () => {
+    expect(dropDisconnected(pad1, [0])).toEqual({ kind: 'keyboard' });
+    expect(dropDisconnected(pad0, [])).toEqual({ kind: 'keyboard' });
   });
 });

@@ -18,3 +18,9 @@ export function nextActiveDevice(current: Device, pressed: readonly Device[]): D
   if (first === undefined) return current;
   return pressed.some((d) => same(d, current)) ? current : first;
 }
+
+/** current がパッドで、その index が connected に含まれなければキーボードに戻す。それ以外は current のまま */
+export function dropDisconnected(current: Device, connected: readonly number[]): Device {
+  if (current.kind === 'pad' && !connected.includes(current.index)) return { kind: 'keyboard' };
+  return current;
+}

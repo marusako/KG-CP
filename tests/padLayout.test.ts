@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectPadFamily, padButtonLabel } from '../src/input/padLayout';
+import { detectPadFamily, padButtonLabel, padDisplayName } from '../src/input/padLayout';
 
 describe('detectPadFamily (受け入れ条件 1)', () => {
   it('Chrome 形式の id を見分ける', () => {
@@ -95,5 +95,22 @@ describe('padButtonLabel (受け入れ条件 2)', () => {
     for (const i of [0, 3, 12, 16, 17, 18]) {
       expect(padButtonLabel('unknown', i)).toBe(`ボタン ${i}`);
     }
+  });
+});
+
+describe('padDisplayName (受け入れ条件 10)', () => {
+  it('Chrome 形式は最初の " (" より前', () => {
+    expect(padDisplayName('DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 0ce6)')).toBe(
+      'DualSense Wireless Controller',
+    );
+    expect(padDisplayName('Xbox 360 Controller (XInput STANDARD GAMEPAD)')).toBe('Xbox 360 Controller');
+  });
+
+  it('Firefox 形式は先頭の「16 進-16 進-」より後', () => {
+    expect(padDisplayName('54c-ce6-DualSense Wireless Controller')).toBe('DualSense Wireless Controller');
+  });
+
+  it('取り出した結果が空なら id のまま', () => {
+    expect(padDisplayName('(STANDARD GAMEPAD)')).toBe('(STANDARD GAMEPAD)');
   });
 });

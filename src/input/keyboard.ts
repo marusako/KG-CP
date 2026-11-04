@@ -1,4 +1,3 @@
-import { ACTIONS, type Action, type Bindings } from './bindings';
 import { KeyTimeline } from './timeline';
 
 /** 文字を打つ種類の input の type（type 省略は text 扱い） */
@@ -34,6 +33,8 @@ export class KeyboardReader {
       if (isTextTarget(e.target)) return;
       if (this.captureNext) {
         e.preventDefault();
+        // キーリピートは捕まえに渡さない
+        if (e.repeat) return;
         const cb = this.captureNext;
         this.captureNext = null;
         cb(e.code);
@@ -61,15 +62,14 @@ export class KeyboardReader {
   }
 
   /**
-   * frameEnd までのイベントを反映して、そのフレームの操作を返す。
+   * frameEnd までのイベントを反映して、そのフレームで押されていたキーのコード（pressed）と、
+   * 押されていない状態から押されたコード（fresh）を返す。
    * downTimes は今回取り出した keydown の時刻（遅れの計測用）
    */
-  sample(frameEnd: number, bindings: Bindings): { actions: Record<Action, boolean>; downTimes: number[] } {
-    const set = this.timeline.sample(frameEnd);
-    const actions = {} as Record<Action, boolean>;
-    for (const a of ACTIONS) actions[a] = set.has(bindings.keys[a]);
+  sample(frameEnd: number): { pressed: ReadonlySet<string>; fresh: ReadonlySet<string>; downTimes: number[] } {
+    const { pressed, fresh } = this.timeline.sampleDetailed(frameEnd);
     const taken = this.downTimes.filter((t) => t < frameEnd);
     this.downTimes = this.downTimes.filter((t) => t >= frameEnd);
-    return { actions, downTimes: taken };
+    return { pressed, fresh, downTimes: taken };
   }
 }

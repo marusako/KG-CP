@@ -1,5 +1,6 @@
 import type { Device } from '../input/activeDevice';
 import { ACTIONS, BUTTON_NAMES, assignKey, assignPad, saveBindings, type Action, type Bindings } from '../input/bindings';
+import type { PadDir } from '../input/captureFilter';
 import { resolveDirection, type PressedDirs } from '../input/direction';
 import type { PadInfo } from '../input/gamepad';
 import type { KeyboardReader } from '../input/keyboard';
@@ -22,7 +23,7 @@ export interface KeyConfig {
 type ViewMode = 'auto' | WizardTarget;
 
 const ARROWS: Readonly<Record<number, string>> = { 1: '↙', 2: '↓', 3: '↘', 4: '←', 6: '→', 7: '↖', 8: '↑', 9: '↗' };
-const PAD_DIR_BUTTONS = { up: 12, down: 13, left: 14, right: 15 } as const;
+const PAD_DIR_BUTTONS: Readonly<Record<PadDir, number>> = { up: 12, down: 13, left: 14, right: 15 };
 const GUIDE = '操作の名前をクリックすると、その操作だけ直せます（Esc で取り消し）。';
 
 const isButtonAction = (a: Action): a is (typeof BUTTON_NAMES)[number] => (BUTTON_NAMES as readonly string[]).includes(a);
@@ -88,8 +89,6 @@ export function createKeyConfig(root: HTMLElement, bindings: Bindings, keyboard:
     return p ? detectPadFamily(p.id, p.mapping) : 'unknown';
   };
 
-  const keyActionOf = (code: string): Action | undefined => ACTIONS.find((a) => bindings.keys[a] === code);
-
   /** 聞いている操作（一括設定中はその操作、個別の入力待ちならその操作） */
   const targetAction = (): Action | null => {
     if (wizard && !wizard.done) return wizard.actions[wizard.index] ?? null;
@@ -99,6 +98,8 @@ export function createKeyConfig(root: HTMLElement, bindings: Bindings, keyboard:
   /** 押している状態を図と「いまの入力」に反映する。値が変わったときだけ DOM を書き換える */
   const paintPressed = (): void => {
     const kind = viewKind();
+    // まとめて設定の途中は、図の強調をやめて、一覧の聞いている操作だけを強調する
+    const quiet = wizard !== null;
     let dirs: PressedDirs;
     let buttons: string[];
     let signature: string;
@@ -110,8 +111,8 @@ export function createKeyConfig(root: HTMLElement, bindings: Bindings, keyboard:
         if (isButtonAction(a)) buttons.push(a);
         else dirs[a] = true;
       }
-      signature = `k:${[...held].sort().join(',')}`;
-      keyboardDiagram.setPressed(held);
+      signature = `k:${quiet ? '-' : ''}${[...held].sort().join(',')}`;
+      keyboardDiagram.setPressed(quiet ? new Set() : held);
     } else {
       const p = viewPad();
       const pressed = new Set(p?.pressed ?? []);
@@ -125,15 +126,15 @@ export function createKeyConfig(root: HTMLElement, bindings: Bindings, keyboard:
       buttons = BUTTON_NAMES.filter((b) => pressed.has(bindings.pad[b]));
       const sx = Math.round((p?.stick.x ?? 0) * 20);
       const sy = Math.round((p?.stick.y ?? 0) * 20);
-      signature = `p:${p?.index ?? '-'}:${[...pressed].join(',')}:${sx},${sy}`;
-      padDiagram.setPressed(pressed);
+      signature = `p:${quiet ? '-' : ''}${p?.index ?? '-'}:${[...pressed].join(',')}:${sx},${sy}`;
+      padDiagram.setPressed(quiet ? new Set() : pressed);
       padDiagram.setStick(p?.stick.x ?? 0, p?.stick.y ?? 0);
     }
     if (signature === shownSignature) return;
     shownSignature = signature;
     const arrow = ARROWS[resolveDirection(dirs, 'neutral')] ?? '';
     const text = [arrow, ...buttons].filter((s) => s !== '').join(' + ');
-    readout.textContent = `いまの入力: ${text === '' ? '―' : text}`;
+    readout.textContent = `いまの入力（${kind === 'keyboard' ? 'キーボード' : 'パッド'}）: ${text === '' ? '―' : text}`;
   };
 
   const renderDeviceLine = (): void => {
@@ -177,7 +178,7 @@ export function createKeyConfig(root: HTMLElement, bindings: Bindings, keyboard:
     const keyMap = new Map<string, string>();
     for (const a of ACTIONS) keyMap.set(bindings.keys[a], actionName(a));
     keyboardDiagram.setAssigned(keyMap);
-    keyboardDiagram.setTarget(target ? bindings.keys[target] : null);
+    keyboardDiagram.setTarget(target && wizard === null ? bindings.keys[target] : null);
     const missingKeys = ACTIONS.filter((a) => !keyboardDiagram.has(bindings.keys[a]));
     missing.textContent =
       kind === 'keyboard' && missingKeys.length > 0
@@ -187,12 +188,13 @@ export function createKeyConfig(root: HTMLElement, bindings: Bindings, keyboard:
     const family = padFamily();
     padDiagram.setFamily(family);
     padDiagram.setAssigned(new Map(BUTTON_NAMES.map((b) => [bindings.pad[b], b] as const)));
-    padDiagram.setTarget(target && isButtonAction(target) ? bindings.pad[target] : null);
+    padDiagram.setTarget(target && wizard === null && isButtonAction(target) ? bindings.pad[target] : null);
 
     actionList.replaceChildren();
     for (const a of kind === 'keyboard' ? ACTIONS : BUTTON_NAMES) {
       const b = el('button', a === target ? 'waiting' : undefined);
-      const bound = kind === 'keyboard' ? keyLabel(bindings.keys[a]) : padButtonLabel(family, bindings.pad[a as (typeof BUTTON_NAMES)[number]]);
+      const bound =
+        kind === 'keyboard' || !isButtonAction(a) ? keyLabel(bindings.keys[a]) : padButtonLabel(family, bindings.pad[a]);
       b.textContent = `${actionName(a)}: ${bound}`;
       b.addEventListener('click', () => startSingle(a));
       actionList.append(b);

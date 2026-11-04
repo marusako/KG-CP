@@ -20,30 +20,39 @@ export interface CellSpec<K> {
   readonly h?: number;
 }
 
-/** 標準の配置のパッド（番号は W3C Gamepad の Standard Gamepad）。アケコンなどは別の配列を足せばよい */
-export const STANDARD_PAD_LAYOUT: readonly CellSpec<number>[] = [
-  { key: 0, x: 330, y: 150, r: 17 },
-  { key: 1, x: 364, y: 116, r: 17 },
-  { key: 2, x: 296, y: 116, r: 17 },
-  { key: 3, x: 330, y: 82, r: 17 },
-  { key: 4, x: 70, y: 36, w: 64, h: 20 },
-  { key: 5, x: 286, y: 36, w: 64, h: 20 },
-  { key: 6, x: 70, y: 8, w: 64, h: 24 },
-  { key: 7, x: 286, y: 8, w: 64, h: 24 },
-  { key: 8, x: 170, y: 90, r: 11 },
-  { key: 9, x: 250, y: 90, r: 11 },
-  { key: 10, x: 100, y: 100, r: 26 },
-  { key: 11, x: 270, y: 180, r: 26 },
-  { key: 12, x: 150, y: 150, w: 26, h: 26 },
-  { key: 13, x: 150, y: 202, w: 26, h: 26 },
-  { key: 14, x: 124, y: 176, w: 26, h: 26 },
-  { key: 15, x: 176, y: 176, w: 26, h: 26 },
-  { key: 16, x: 210, y: 60, r: 11 },
-  { key: 17, x: 210, y: 130, w: 50, h: 22 },
-];
-const PAD_VIEWBOX = '0 0 420 240';
-/** 左スティックの中心と、点が動ける半径 */
-const STICK = { x: 100, y: 100, travel: 16 };
+/** パッドの図の配置 1 つぶん。アケコンなどは別の PadLayout を作って createPadDiagram に渡せばよい */
+export interface PadLayout {
+  readonly cells: readonly CellSpec<number>[];
+  readonly viewBox: string;
+  /** 左スティックの中心と、点が動ける半径 */
+  readonly stick: { readonly x: number; readonly y: number; readonly travel: number };
+}
+
+/** 標準の配置のパッド（番号は W3C Gamepad の Standard Gamepad） */
+export const STANDARD_PAD_LAYOUT: PadLayout = {
+  viewBox: '0 0 420 240',
+  stick: { x: 100, y: 100, travel: 16 },
+  cells: [
+    { key: 0, x: 330, y: 150, r: 17 },
+    { key: 1, x: 364, y: 116, r: 17 },
+    { key: 2, x: 296, y: 116, r: 17 },
+    { key: 3, x: 330, y: 82, r: 17 },
+    { key: 4, x: 70, y: 36, w: 64, h: 20 },
+    { key: 5, x: 286, y: 36, w: 64, h: 20 },
+    { key: 6, x: 70, y: 8, w: 64, h: 24 },
+    { key: 7, x: 286, y: 8, w: 64, h: 24 },
+    { key: 8, x: 170, y: 90, r: 11 },
+    { key: 9, x: 250, y: 90, r: 11 },
+    { key: 10, x: 100, y: 100, r: 26 },
+    { key: 11, x: 270, y: 180, r: 26 },
+    { key: 12, x: 150, y: 150, w: 26, h: 26 },
+    { key: 13, x: 150, y: 202, w: 26, h: 26 },
+    { key: 14, x: 124, y: 176, w: 26, h: 26 },
+    { key: 15, x: 176, y: 176, w: 26, h: 26 },
+    { key: 16, x: 210, y: 60, r: 11 },
+    { key: 17, x: 210, y: 130, w: 50, h: 22 },
+  ],
+};
 
 const KEY = 38;
 const GAP = 4;
@@ -137,15 +146,15 @@ export interface PadDiagram {
   setTarget(index: number | null): void;
 }
 
-export function createPadDiagram(layout: readonly CellSpec<number>[] = STANDARD_PAD_LAYOUT): PadDiagram {
-  const svg = svgEl('svg', { class: 'diagram', viewBox: PAD_VIEWBOX, role: 'img', 'aria-label': 'パッドの図' });
+export function createPadDiagram(layout: PadLayout = STANDARD_PAD_LAYOUT): PadDiagram {
+  const svg = svgEl('svg', { class: 'diagram', viewBox: layout.viewBox, role: 'img', 'aria-label': 'パッドの図' });
   const cells = new Map<number, Cell>();
-  for (const spec of layout) {
+  for (const spec of layout.cells) {
     const c = new Cell(spec);
     cells.set(spec.key, c);
     svg.append(c.g);
   }
-  const dot = svgEl('circle', { class: 'dg-stick', cx: STICK.x, cy: STICK.y, r: 6 });
+  const dot = svgEl('circle', { class: 'dg-stick', cx: layout.stick.x, cy: layout.stick.y, r: 6 });
   svg.append(dot);
   let family: PadFamily | null = null;
   let stickKey = '';
@@ -164,8 +173,8 @@ export function createPadDiagram(layout: readonly CellSpec<number>[] = STANDARD_
     },
     setPressed: (pressed) => applySet(cells, pressed, (c, on) => c.setPressed(on)),
     setStick: (x, y) => {
-      const cx = Math.round((STICK.x + x * STICK.travel) * 10) / 10;
-      const cy = Math.round((STICK.y + y * STICK.travel) * 10) / 10;
+      const cx = Math.round((layout.stick.x + x * layout.stick.travel) * 10) / 10;
+      const cy = Math.round((layout.stick.y + y * layout.stick.travel) * 10) / 10;
       const k = `${cx},${cy}`;
       if (k === stickKey) return;
       stickKey = k;
@@ -189,7 +198,7 @@ export interface KeyboardDiagram {
 }
 
 export function createKeyboardDiagram(layout: readonly CellSpec<string>[] = KEYBOARD_LAYOUT): KeyboardDiagram {
-  const svg = svgEl('svg', { class: 'diagram', viewBox: KEYBOARD_VIEWBOX, role: 'img', 'aria-label': 'キーボードの図' });
+  const svg = svgEl('svg', { class: 'diagram keyboard', viewBox: KEYBOARD_VIEWBOX, role: 'img', 'aria-label': 'キーボードの図' });
   const cells = new Map<string, Cell>();
   for (const spec of layout) {
     const c = new Cell(spec);

@@ -171,6 +171,78 @@ export function wizardResult(state: WizardState, current: Bindings): Bindings;
 6. 既存のテストがすべて通ったまま、`npm test`・`npm run typecheck`・`npm run build` が終了コード 0
 7. ブラウザで、キーボードとパッドを交互に触ると「操作中」と図が切り替わり、押したところが光り、一括設定と個別の直しができる（開発者が手で確認）
 
+## 変更 1（レビューの提案への対応）
+
+### テストを付ける純粋な関数
+
+#### 離すまで無視する仕組み（`src/input/captureFilter.ts`）
+
+main.ts の中にある「設定中・設定直後に押していた入力は、離すまでゲーム入力に使わない」処理を、純粋な関数に切り出す。
+
+```ts
+export type PadDir = 'up' | 'down' | 'left' | 'right';
+export interface RawInput {
+  keys: ReadonlySet<string>;        // このフレームで押されていたキーのコード（KeyTimeline の sample の結果）
+  freshKeys: ReadonlySet<string>;   // このフレームで「押されていない状態から」押されたキーのコード
+  padButtons: ReadonlySet<number>;  // 押しているパッドのボタン番号
+  padDirs: ReadonlySet<PadDir>;     // パッドで入っている方向（十字キー・スティック）
+}
+export interface IgnoreSet {
+  keys: ReadonlySet<string>;
+  padButtons: ReadonlySet<number>;
+  padDirs: ReadonlySet<PadDir>;
+}
+export function emptyIgnore(): IgnoreSet;
+
+/**
+ * capturing は「捕まえ中、またはこのフレームで捕まえが終わった」。
+ * 返す input は、ゲームに使ってよい入力（freshKeys は使わないので空でよい）
+ */
+export function filterInput(raw: RawInput, ignore: IgnoreSet, capturing: boolean): { input: Omit<RawInput, 'freshKeys'>; ignore: IgnoreSet };
+```
+
+- `capturing` が true: 新しい ignore = 今の ignore ∪ raw の全部（keys・padButtons・padDirs それぞれ）。input はすべて空
+- `capturing` が false:
+  - 新しい ignore = （今の ignore ∩ raw）。ただし keys は、さらに `freshKeys` に入っているものを除く（1 フレームのうちに離して押し直したキーは、新しい押下として使えるようにする）
+  - input = raw − 新しい ignore（それぞれ）
+- 引数は書き換えない
+
+KeyTimeline に `sampleDetailed(frameEnd): { pressed: ReadonlySet<string>; fresh: ReadonlySet<string> }` を足す。`pressed` は今の `sample` の結果と同じ。`fresh` は、取り出したイベントのうち、押されていない状態からの down だったコード。`sample` は `sampleDetailed(...).pressed` を返す（今の動きは変えない）。
+
+main.ts の `heldCodes`（keydown/keyup を別に数えていた集合）は、この仕組みに置き換えて片付ける。
+
+#### 抜いたパッド（`src/input/activeDevice.ts` に追加）
+
+```ts
+/** current がパッドで、その index が connected に含まれなければ { kind: 'keyboard' }。それ以外は current のまま（同じ参照） */
+export function dropDisconnected(current: Device, connected: readonly number[]): Device;
+```
+
+#### パッド名の取り出し（`padDisplayName`、テストを足す）
+
+- Chrome 形式は、最初の ` (` より前: `DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 0ce6)` → `DualSense Wireless Controller`、`Xbox 360 Controller (XInput STANDARD GAMEPAD)` → `Xbox 360 Controller`
+- Firefox 形式は、先頭の「16 進-16 進-」より後: `54c-ce6-DualSense Wireless Controller` → `DualSense Wireless Controller`
+- 取り出した結果が空なら id のまま（例: `(STANDARD GAMEPAD)` → `(STANDARD GAMEPAD)`）
+
+### 画面とつなぎ込みの直し（テストなし、本体がブラウザで確かめる）
+
+- キーボードの図の文字を大きくする（実際の表示で 12px 以上になるようにする）
+- キーコンフィグのパネルの幅を固定し、図を切り替えても配置が変わらないようにする。操作の一覧は、幅が足りれば図の横に置く
+- まとめて設定の途中は、図のキーの強調をやめ、一覧で聞いている操作だけを強調する
+- 「いまの入力」に、どのデバイスの入力かを書き添える（例: `いまの入力（パッド）: ↘ + LP`）
+- まとめて設定・個別の入力待ちのあいだ、キーリピート（`e.repeat`）は捕まえに渡さない（`preventDefault` だけする）
+- 初めて見えたパッドは、前回を「何も押していない」とみなして、最初の1回の押下で操作中のデバイスを切り替える
+- パッドを抜いたら `dropDisconnected` で操作中のデバイスをキーボードに戻す
+- パッドの図の配置を `{ cells, viewBox, stick }` のような1つのデータにまとめ、アケコンの配置を足すときに差し替えやすくする
+- 使われていない `keyActionOf` を消す。方向の名前の配列は1か所にまとめ、`as` のキャストが要らない型にする
+
+### 受け入れ条件（追加）
+
+8. `filterInput` が上のルールどおりに動く（捕まえ中は全部無視して集合に足す／離したら外れる／押し続けている間は無視が続く／1 フレーム内の押し直しは使える／パッドで捕まえが終わったフレームも漏れない／引数を書き換えない）
+9. `KeyTimeline.sampleDetailed` の `fresh` が「押されていない状態からの down」だけを含み、既存の `sample` の動きが変わらない
+10. `dropDisconnected` と `padDisplayName` が上のとおりに動く
+11. 既存のテストがすべて通ったまま、`npm test`・`npm run typecheck`・`npm run build` が終了コード 0
+
 ## この段階でやらないこと
 
 - アケコン・レバーレスの配置図、2台以上のパッドを同時に別々に設定すること、ボタン配置のプリセット

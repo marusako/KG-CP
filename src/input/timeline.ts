@@ -18,6 +18,11 @@ export class KeyTimeline {
 
   /** time < frameEnd のイベントを取り出して反映し、このフレームで押されていたコードの集合を返す */
   sample(frameEnd: number): ReadonlySet<string> {
+    return this.sampleDetailed(frameEnd).pressed;
+  }
+
+  /** sample に加えて、押されていない状態から押されたコード（fresh）も返す */
+  sampleDetailed(frameEnd: number): { pressed: ReadonlySet<string>; fresh: ReadonlySet<string> } {
     const tapped = new Set<string>();
     let n = 0;
     while (n < this.pending.length && (this.pending[n] as { e: KeyEvent }).e.time < frameEnd) {
@@ -32,7 +37,7 @@ export class KeyTimeline {
       }
     }
     this.pending.splice(0, n);
-    return new Set([...this.held, ...tapped]);
+    return { pressed: new Set([...this.held, ...tapped]), fresh: tapped };
   }
 
   /** 押下状態と積んだイベントを全部消す */
