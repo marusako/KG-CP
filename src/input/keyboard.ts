@@ -26,6 +26,8 @@ export class KeyboardReader {
   private downTimes: number[] = [];
   /** 次に押されたキーを受け取るコールバック（キーコンフィグ用） */
   captureNext: ((code: string) => void) | null = null;
+  /** まだ取り出していない「キーが押された瞬間」があるか（操作中のデバイスの判定用。キーコンフィグの捕まえ中は数えない） */
+  private anyKeyDown = false;
 
   constructor(target: Window) {
     target.addEventListener('keydown', (e) => {
@@ -38,6 +40,7 @@ export class KeyboardReader {
         return;
       }
       if (e.repeat) return;
+      this.anyKeyDown = true;
       this.timeline.push({ code: e.code, down: true, time: e.timeStamp });
       this.downTimes.push(e.timeStamp);
     });
@@ -48,6 +51,13 @@ export class KeyboardReader {
       this.timeline.clear();
       this.downTimes = [];
     });
+  }
+
+  /** 前回呼んでから何かのキーが押されたかを返し、印を下ろす */
+  takeAnyKeyDown(): boolean {
+    const v = this.anyKeyDown;
+    this.anyKeyDown = false;
+    return v;
   }
 
   /**

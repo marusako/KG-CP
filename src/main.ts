@@ -4,10 +4,12 @@ import { analyzeAttempt } from './core/detect';
 import { compressHistory } from './core/history';
 import { createFrameClock, dueFrames, type FrameClock } from './core/clock';
 import type { FrameInput } from './core/types';
-import { BUTTON_NAMES, loadBindings } from './input/bindings';
+import { nextActiveDevice, type Device } from './input/activeDevice';
+import { BUTTON_NAMES, loadBindings, type Action } from './input/bindings';
 import { resolveDirection } from './input/direction';
-import { readGamepads, type PadState } from './input/gamepad';
+import { readGamepads, type PadInfo, type PadState } from './input/gamepad';
 import { KeyboardReader } from './input/keyboard';
+import { detectPadFamily } from './input/padLayout';
 import { SAMPLE_RECIPES } from './core/samples';
 import { createCommandPanel } from './ui/commandPanel';
 import { createComboPanel } from './ui/comboPanel';
@@ -71,14 +73,62 @@ const history: FrameInput[] = [];
 /** 通算フレーム番号（毎フレーム 1 ずつ増える） */
 let frame = 0;
 let prevPadRaw = new Set<number>();
+/** パッドごとの前回の「押している入力」（ボタン番号と左スティックの方向）。新しく押された瞬間の判定用 */
+const prevPadInputs = new Map<number, Set<string>>();
+/** 捕まえ中（と終わった直後）に押していた入力。離すまでゲームの入力に使わない */
+const ignoredCodes = new Set<string>();
+const ignoredPadButtons = new Set<number>();
+const ignoredPadDirs = new Set<string>();
+const heldCodes = new Set<string>();
+let tainting = false;
+window.addEventListener('keydown', (e) => heldCodes.add(e.code));
+window.addEventListener('keyup', (e) => heldCodes.delete(e.code));
+window.addEventListener('blur', () => heldCodes.clear());
+const PAD_DIR_NAMES = ['up', 'down', 'left', 'right'] as const;
+let activeDevice: Device = { kind: 'keyboard' };
+
+function padInputs(p: PadInfo): Set<string> {
+  const s = new Set(p.pressed.map((i) => `b${i}`));
+  for (const d of ['up', 'down', 'left', 'right'] as const) if (p.stickDirs[d]) s.add(`s${d}`);
+  return s;
+}
+
+/** このフレームで新しく押されたデバイス（キーボード、パッド）を返し、操作中のデバイスを更新する */
+function updateActiveDevice(wasCapturing: boolean): void {
+  const pressed: Device[] = [];
+  // キーボードの印は捕まえ中でも取り出して下ろす（捕まえ中の押下は数えない）
+  if (keyboard.takeAnyKeyDown() && !wasCapturing) pressed.push({ kind: 'keyboard' });
+  const seen = new Set<number>();
+  for (const p of pad.pads) {
+    seen.add(p.index);
+    const now = padInputs(p);
+    const before = prevPadInputs.get(p.index);
+    prevPadInputs.set(p.index, now);
+    if (before === undefined) continue;
+    if (!wasCapturing && [...now].some((k) => !before.has(k))) {
+      pressed.push({ kind: 'pad', index: p.index, id: p.id, family: detectPadFamily(p.id, p.mapping) });
+    }
+  }
+  for (const i of prevPadInputs.keys()) if (!seen.has(i)) prevPadInputs.delete(i);
+  const next = nextActiveDevice(activeDevice, pressed);
+  if (next !== activeDevice) {
+    activeDevice = next;
+    keyConfig.setDevice(next);
+  }
+  keyConfig.update(pad.pads);
+}
 let pad: PadState = readGamepads(bindings);
 let lastPadTimestamp: number | null = null;
 
 /** パッドを新しく読む。ブラウザでは rAF のときにしか読めない */
 function refreshPad(): void {
   pad = readGamepads(bindings);
+  // この読み取りで捕まえが終わっても、今回の押下はゲームにも操作中のデバイスにも使わない
+  const wasCapturing = keyConfig.isCapturing();
+  if (wasCapturing) tainting = true;
   for (const i of pad.rawPressed) if (!prevPadRaw.has(i)) keyConfig.onPadButton(i);
   prevPadRaw = new Set(pad.rawPressed);
+  updateActiveDevice(wasCapturing);
   metrics.setPadPresent(pad.timestamp !== null);
   if (pad.timestamp !== null) {
     if (lastPadTimestamp !== null && pad.timestamp !== lastPadTimestamp) {
@@ -92,19 +142,36 @@ function refreshPad(): void {
 
 function stepFrame(end: number): void {
   // キーボードとパッドは OR で合成
-  const { actions: key, downTimes } = keyboard.sample(end, bindings);
-  const processedAt = performance.now();
-  for (const t of downTimes) metrics.onKeyLatency(processedAt - t);
+  const { actions: sampled, downTimes } = keyboard.sample(end, bindings);
+  // キーコンフィグで入力待ちの間と、その間に押していた入力を離すまでは、ゲームの入力に使わない
+  const capturing = keyConfig.isCapturing();
+  if (capturing || tainting) {
+    for (const c of heldCodes) ignoredCodes.add(c);
+    for (const i of pad.rawPressed) ignoredPadButtons.add(i);
+    for (const d of PAD_DIR_NAMES) if (pad.dirs[d]) ignoredPadDirs.add(d);
+  }
+  if (!capturing) {
+    tainting = false;
+    for (const c of ignoredCodes) if (!heldCodes.has(c)) ignoredCodes.delete(c);
+    for (const i of ignoredPadButtons) if (!pad.rawPressed.includes(i)) ignoredPadButtons.delete(i);
+    for (const d of ignoredPadDirs) if (!pad.dirs[d as (typeof PAD_DIR_NAMES)[number]]) ignoredPadDirs.delete(d);
+  }
+  const usable = (a: Action): boolean => !capturing && sampled[a] && !ignoredCodes.has(bindings.keys[a]);
+  const padDir = (d: (typeof PAD_DIR_NAMES)[number]): boolean => !capturing && pad.dirs[d] && !ignoredPadDirs.has(d);
+  const padButton = (b: (typeof BUTTON_NAMES)[number]): boolean => {
+    const i = bindings.pad[b];
+    return !capturing && pad.rawPressed.includes(i) && !ignoredPadButtons.has(i);
+  };
   const dir = resolveDirection(
     {
-      up: key.up || pad.dirs.up,
-      down: key.down || pad.dirs.down,
-      left: key.left || pad.dirs.left,
-      right: key.right || pad.dirs.right,
+      up: usable('up') || padDir('up'),
+      down: usable('down') || padDir('down'),
+      left: usable('left') || padDir('left'),
+      right: usable('right') || padDir('right'),
     },
     'neutral',
   );
-  const buttons = BUTTON_NAMES.filter((b) => key[b] || pad.buttons[b]);
+  const buttons = BUTTON_NAMES.filter((b) => usable(b) || padButton(b));
   history.push({ dir, buttons });
   if (history.length > MAX_FRAMES) history.shift();
 

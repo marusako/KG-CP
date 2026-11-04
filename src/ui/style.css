@@ -13,8 +13,27 @@ button { background: #2c303a; color: inherit; border: 1px solid #444; border-rad
 .result { min-height: 48px; padding: 8px; border-radius: 4px; background: #15171c; }
 .result.ok { color: #6bd96b; }
 .result.ng { color: #ff6b6b; }
-.keyconfig { display: grid; grid-template-columns: auto auto auto; gap: 4px 8px; align-items: center; }
-.keyconfig .waiting { background: #9a6a1a; }
+.keyconfig { max-width: 560px; }
+.kc-device { font-weight: bold; margin-bottom: 6px; }
+.kc-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+.kc-tabs button.active { background: #3a5a9a; }
+.kc-prompt { min-height: 20px; margin-bottom: 6px; color: #ffd166; }
+.kc-prompt.error { color: #ff6b6b; }
+.kc-body { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.kc-diagram { flex: 1 1 320px; min-width: 280px; }
+.kc-side { display: flex; flex-direction: column; gap: 8px; }
+.kc-readout { font-size: 18px; min-height: 24px; font-variant-numeric: tabular-nums; }
+.kc-actions { display: grid; grid-template-columns: repeat(2, auto); gap: 4px; }
+.kc-actions .waiting { background: #9a6a1a; }
+.kc-controls { display: flex; gap: 8px; margin-top: 8px; }
+.diagram { width: 100%; height: auto; }
+.dg-shape { fill: #2c303a; stroke: #555; stroke-width: 1.5; }
+.dg-name { fill: #aab; font-size: 11px; pointer-events: none; }
+.dg-assigned { fill: #7fd1ff; font-size: 11px; font-weight: bold; pointer-events: none; }
+.dg-cell.pressed .dg-shape { fill: #ffd166; }
+.dg-cell.pressed .dg-name, .dg-cell.pressed .dg-assigned { fill: #15171c; }
+.dg-cell.target .dg-shape { stroke: #ff9f1c; stroke-width: 3; }
+.dg-stick { fill: #ff6b6b; pointer-events: none; }
 .note { color: #9aa; font-size: 12px; margin-top: 8px; }
 .tabs { flex-basis: 100%; display: flex; gap: 4px; }
 .tabs button.active { background: #3a5a9a; }
