@@ -145,6 +145,20 @@
 ### デスクトップ化（次の段階の予定）
 
 - 下調べの結果: `docs/plans/desktop-research.md`（いまの見立ては (A)。計測と試作で決める）
+- [ ] 試作でパッドの読み取りを測る（パッドをつないで実行し、出た結果をここに貼る）
+  - `cd spikes/pad-probe` してから `cargo run --release -- gilrs 15`
+  - 15 秒のあいだ、スティックをぐるぐる回す・ボタンを連打する
+  - 見るところ: 「イベントの間隔」が 8ms や 10ms に固まるか、1〜4ms に散らばるか
+
+結果（gilrs）:
+
+```
+（ここに貼る）
+```
+- [ ] SDL3 と Tauri の試作（後回し中）。Linux では開発用のライブラリを入れる管理者の権限が要る。権限がそろったら次を入れて、試作を作る
+  - `sudo apt install libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev libsdl3-dev`
+  - 作るもの: `spikes/pad-probe` の `sdl3` モード（gilrs と比べる）と、Tauri の空のアプリ（WebView でパッドが読めるか・`timeStamp` の基準・Channel の遅れ）
+  - Windows で先に試してもよい
 - [ ] 上の「4. 計測」の数値と体感をもとに、方式を決める
   - (A) Tauri ＋ 入力だけ Rust で時刻付きで読む（画面と判定は今の TypeScript）
   - (B) 全部ネイティブで作り直す
