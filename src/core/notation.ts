@@ -4,32 +4,39 @@ export type StepInput =
   | { kind: 'normal'; dirs: readonly Direction[]; buttons: readonly string[] }
   | { kind: 'command'; command: CommandDef; buttons: readonly string[] };
 
-const PUNCH = ['LP', 'MP', 'HP'] as const;
-const KICK = ['LK', 'MK', 'HK'] as const;
-const BUTTON_SUFFIX = /(LP|MP|HP|LK|MK|HK|P|K)$/;
+/** ゲームごとの表記のルール */
+export interface NotationRules {
+  /** ボタンの名前 */
+  buttons: readonly string[];
+  /** まとめ書き。例: スト6 の 'P' は ['LP','MP','HP']。GG にはない */
+  buttonGroups: Readonly<Record<string, readonly string[]>>;
+  commands: readonly CommandDef[];
+}
 
-/** 表記（例: 2LP, 236HP, [4]6P）を入力の条件に読み替える */
+/** 表記（例: 2LP, 236HP, [4]6P, 2D, 236HS）を入力の条件に読み替える */
 export function parseStep(
   text: string,
-  commands: readonly CommandDef[],
+  rules: NotationRules,
 ): { ok: true; input: StepInput } | { ok: false; error: string } {
   const t = text.trim();
   const fail = { ok: false, error: `「${t}」は読めない表記です` } as const;
-  const m = BUTTON_SUFFIX.exec(t);
-  if (!m) return fail;
-  const button = m[1] as string;
-  const dirPart = t.slice(0, m.index);
-  const family = button.endsWith('P') ? 'P' : 'K';
+  // 末尾のボタンの部分は、いちばん長く一致する名前にする（'HS' を 'S' と読み違えない）
+  const name = [...rules.buttons, ...Object.keys(rules.buttonGroups)]
+    .filter((n) => t.endsWith(n))
+    .sort((a, b) => b.length - a.length)[0];
+  if (name === undefined) return fail;
+  const dirPart = t.slice(0, t.length - name.length);
+  const group = Object.hasOwn(rules.buttonGroups, name) ? rules.buttonGroups[name] : undefined;
 
   if (/^[1-9]$/.test(dirPart)) {
     const d = Number(dirPart) as Direction;
     const dirs: readonly Direction[] = d === 2 ? [1, 2, 3] : [d];
-    const buttons = button === 'P' ? PUNCH : button === 'K' ? KICK : [button];
-    return { ok: true, input: { kind: 'normal', dirs, buttons } };
+    return { ok: true, input: { kind: 'normal', dirs, buttons: group ?? [name] } };
   }
 
-  const command = commands.find((c) => c.id === `${dirPart}${family}`);
+  const command = rules.commands.find((c) => c.notation === dirPart);
   if (dirPart === '' || !command) return fail;
-  const buttons = button === 'P' || button === 'K' ? command.buttons : [button];
+  const buttons = (group ?? [name]).filter((b) => command.buttons.includes(b));
+  if (buttons.length === 0) return fail;
   return { ok: true, input: { kind: 'command', command, buttons } };
 }

@@ -21,6 +21,7 @@ const LP = ['LP'];
 function motion236(motionWindow: number, buttonWindow: number): CommandDef {
   return {
     kind: 'motion',
+    notation: 'test',
     id: 'test-236',
     name: 'test 236',
     steps: [{ dirs: [2] }, { dirs: [3] }, { dirs: [6] }],
@@ -33,6 +34,7 @@ function motion236(motionWindow: number, buttonWindow: number): CommandDef {
 function charge46(minHold: number, motionWindow: number, buttonWindow: number): CommandDef {
   return {
     kind: 'motion',
+    notation: 'test',
     id: 'test-[4]6',
     name: 'test [4]6',
     steps: [{ dirs: [4], minHold }, { dirs: [6] }],
@@ -43,7 +45,7 @@ function charge46(minHold: number, motionWindow: number, buttonWindow: number): 
 }
 
 function rotation(motionWindow: number): CommandDef {
-  return { kind: 'rotation', id: 'test-360', name: 'test 360', buttons: ['LP'], motionWindow };
+  return { kind: 'rotation', notation: '360', id: 'test-360', name: 'test 360', buttons: ['LP'], motionWindow };
 }
 
 describe('analyzeAttempt: 成立 (受け入れ条件 1)', () => {
@@ -231,6 +233,7 @@ describe('analyzeAttempt: 溜め (minHold)', () => {
   it('dirs が複数の溜めは、dirs に入る方向が混ざっていても連続として数える', () => {
     const def: CommandDef = {
       kind: 'motion',
+      notation: 'test',
       id: 'test-back-charge',
       name: 'test back charge',
       steps: [{ dirs: [1, 4, 7], minHold: 3 }, { dirs: [6] }],
@@ -245,6 +248,7 @@ describe('analyzeAttempt: 溜め (minHold)', () => {
   it('溜めが最初の手の [2]8K 型でも溜め不足を検出する', () => {
     const def: CommandDef = {
       kind: 'motion',
+      notation: 'test',
       id: 'test-[2]8K',
       name: 'test [2]8K',
       steps: [{ dirs: [2], minHold: 4 }, { dirs: [8] }],
@@ -260,6 +264,7 @@ describe('analyzeAttempt: 溜め (minHold)', () => {
     function secondStepCharge(minHold: number): CommandDef {
       return {
         kind: 'motion',
+        notation: 'test',
         id: 'test-2[8]',
         name: 'test 2[8]',
         steps: [{ dirs: [2] }, { dirs: [8], minHold }],
@@ -285,6 +290,7 @@ describe('analyzeAttempt: 溜め (minHold)', () => {
     // f から数えると heldFrames = 4 (minHold 4 を満たす)。lastFrame から数えると 1 で不足になってしまう
     const def: CommandDef = {
       kind: 'motion',
+      notation: 'test',
       id: 'test-2[8]-hold',
       name: 'test 2[8] hold',
       steps: [{ dirs: [2] }, { dirs: [8], minHold: 4 }],
@@ -409,6 +415,7 @@ describe('analyzeAttempt: 押した瞬間でなければ null (受け入れ条�
 describe('analyzeAttempt: 隣り合う手の方向が重なる定義（変更 2）', () => {
   const dash66: CommandDef = {
     kind: 'motion',
+    notation: 'test',
     id: 'test-66',
     name: 'test 66',
     steps: [{ dirs: [6] }, { dirs: [6] }],
@@ -435,6 +442,7 @@ describe('analyzeAttempt: 隣り合う手の方向が重なる定義（変更 2�
   it('前向き探索だけで全手が揃うときも例外を投げず、最後の手を expected にする', () => {
     const def: CommandDef = {
       kind: 'motion',
+      notation: 'test',
       id: 'test-overlap',
       name: 'test overlap',
       steps: [{ dirs: [6] }, { dirs: [3, 6] }],

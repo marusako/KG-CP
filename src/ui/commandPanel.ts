@@ -24,6 +24,8 @@ export function describeResult(r: AttemptResult): string {
 export interface CommandPanel {
   readonly selected: () => CommandDef;
   readonly showResult: (r: AttemptResult) => void;
+  /** 一覧を入れ替え、先頭を選ぶ（成功率も数え直す） */
+  readonly setCommands: (commands: readonly CommandDef[]) => void;
 }
 
 export function createCommandPanel(root: HTMLElement, commands: readonly CommandDef[]): CommandPanel {
@@ -50,27 +52,40 @@ export function createCommandPanel(root: HTMLElement, commands: readonly Command
         ? `直近の成功率: -`
         : `直近の成功率: ${Math.round((ok / recent.length) * 100)}%（${ok}/${recent.length}）`;
   };
-  updateRate();
 
-  const buttons = commands.map((c) => {
-    const b = document.createElement('button');
-    b.textContent = c.name;
-    b.addEventListener('click', () => {
-      current = c;
-      recent = [];
-      buttons.forEach((x) => x.classList.toggle('active', x === b));
-      result.className = 'result';
-      result.textContent = 'ボタンを押すと判定します';
-      updateRate();
-      b.blur();
+  const resetView = () => {
+    recent = [];
+    result.className = 'result';
+    result.textContent = 'ボタンを押すと判定します';
+    updateRate();
+  };
+
+  const renderList = (commands: readonly CommandDef[]) => {
+    const buttons = commands.map((c) => {
+      const b = document.createElement('button');
+      b.textContent = c.name;
+      b.classList.toggle('active', c === current);
+      b.addEventListener('click', () => {
+        current = c;
+        buttons.forEach((x) => x.classList.toggle('active', x === b));
+        resetView();
+        b.blur();
+      });
+      return b;
     });
-    return b;
-  });
-  buttons[0]?.classList.add('active');
-  list.append(...buttons);
+    list.replaceChildren(...buttons);
+  };
+
+  resetView();
+  renderList(commands);
 
   return {
     selected: () => current,
+    setCommands: (next) => {
+      current = next[0] as CommandDef;
+      renderList(next);
+      resetView();
+    },
     showResult: (r) => {
       result.className = `result ${r.ok ? 'ok' : 'ng'}`;
       result.textContent = describeResult(r);

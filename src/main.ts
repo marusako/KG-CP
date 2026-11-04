@@ -1,17 +1,25 @@
 import './ui/style.css';
-import { DEFAULT_COMMANDS } from './core/commands';
 import { analyzeAttempt } from './core/detect';
 import { compressHistory, historyAfterStall } from './core/history';
 import { createFrameClock, dueFrames, type FrameClock } from './core/clock';
 import type { FrameInput } from './core/types';
 import { dropDisconnected, nextActiveDevice, type Device } from './input/activeDevice';
-import { emptyIgnore, filterInput, type IgnoreSet, type PadDir } from './input/captureFilter';
-import { BUTTON_NAMES, DIRECTION_NAMES, loadBindings } from './input/bindings';
+import {
+  INITIAL_GATE,
+  emptyIgnore,
+  filterInput,
+  gateEnterGame,
+  gateFrame,
+  gateSawCapturing,
+  type IgnoreSet,
+  type PadDir,
+} from './input/captureFilter';
+import { DIRECTION_NAMES, loadBindings } from './input/bindings';
 import { resolveDirection } from './input/direction';
 import { readGamepads, type PadInfo, type PadState } from './input/gamepad';
 import { KeyboardReader } from './input/keyboard';
 import { detectPadFamily } from './input/padLayout';
-import { SAMPLE_RECIPES } from './core/samples';
+import { PROFILES, profileFor, type GameProfile } from './core/profiles';
 import type { GameId } from './core/games';
 import { NO_MENU_BUTTONS, menuActions, type MenuAction, type MenuButtons } from './core/menu';
 import { DEFAULT_SETTINGS, parseSettings, serializeSettings, type Settings } from './core/settings';
@@ -35,7 +43,6 @@ const STALL_MESSAGE = '処理が止まったため、この挑戦は無効です
 const app = document.getElementById('app');
 if (!app) throw new Error('#app が見つかりません');
 
-const bindings = loadBindings();
 const keyboard = new KeyboardReader(window);
 const metrics = createMetricsPanel(document.body);
 
@@ -57,6 +64,20 @@ function saveSettings(s: Settings): void {
 
 let settings = loadSettings();
 
+/** いまのゲームの設定と、そのゲームのキーの割り当て */
+let profile: GameProfile = profileFor(settings.lastGame) ?? PROFILES.sf6;
+let bindings = loadBindings(profile);
+
+/** game に入るとき、前と違うゲームなら、パネルを作り直さずに中身を入れ替える */
+function switchGame(next: GameProfile): void {
+  if (next.id === profile.id) return;
+  profile = next;
+  bindings = loadBindings(next);
+  panel.setCommands(next.commands);
+  comboPanel.setProfile(next);
+  keyConfig.setProfile(next, bindings);
+}
+
 /** 練習画面（game のときだけ見せる）。レイアウトに影響しないよう display: contents で包む */
 const gameRoot = document.createElement('div');
 gameRoot.className = 'game-root';
@@ -74,9 +95,9 @@ practicePane.className = 'tab-pane';
 const comboPane = document.createElement('div');
 comboPane.className = 'tab-pane';
 gameRoot.append(practicePane, comboPane);
-const panel = createCommandPanel(practicePane, DEFAULT_COMMANDS);
-const comboPanel = createComboPanel(comboPane, DEFAULT_COMMANDS, SAMPLE_RECIPES);
-const keyConfig = createKeyConfig(gameRoot, bindings, keyboard);
+const panel = createCommandPanel(practicePane, profile.commands);
+const comboPanel = createComboPanel(comboPane, profile);
+const keyConfig = createKeyConfig(gameRoot, profile, bindings, keyboard);
 
 type Tab = 'practice' | 'combo';
 let activeTab: Tab = 'practice';
@@ -117,6 +138,10 @@ const screens = createScreens(app, {
   },
   onScreen: (screen: Screen, prev: Screen) => {
     gameRoot.hidden = screen !== 'game';
+    if (screen === 'game') {
+      const next = profileFor(settings.lastGame);
+      if (next) switchGame(next);
+    }
     if (screen === 'game' || prev === 'game') {
       // 練習の途中の状態は捨てる
       comboPanel.reset();
@@ -126,7 +151,7 @@ const screens = createScreens(app, {
     if (screen === 'game') {
       // 決定に使った入力を押したまま入っても、離すまで練習の入力にしない。
       // 入った時刻より後に終わるフレームを 1 つ処理するまでは、捕まえ中として扱う
-      taintSince = performance.now();
+      gate = gateEnterGame(gate, performance.now());
       // 前の練習の入力が残らないよう、履歴をニュートラルの 1 フレームにする
       history.splice(0, history.length, { dir: 5, buttons: [] });
     }
@@ -142,13 +167,8 @@ let prevPadRaw = new Set<number>();
 const prevPadInputs = new Map<number, Set<string>>();
 /** 捕まえ中（と終わった直後）に押していた入力。離すまでゲームの入力に使わない */
 let ignore: IgnoreSet = emptyIgnore();
-/**
- * game に入った時刻。決定に使った入力を押したまま入っても練習に漏れないよう、
- * frameEnd がこの時刻より後のフレームを 1 つ処理し終えるまで捕まえ中として扱う。null なら不要
- */
-let taintSince: number | null = null;
-/** 前に見たときキーコンフィグが捕まえ中だった。終わったのを見つけたフレームを捕まえ中として扱うため */
-let capturePending = false;
+/** 入力を捨てるフレームの判断の状態（捕まえ中・game に入った直後） */
+let gate = INITIAL_GATE;
 let activeDevice: Device = { kind: 'keyboard' };
 /** 前回のパッドのメニュー操作の状態。押した瞬間の取り出し用 */
 let prevMenuPad: MenuButtons = NO_MENU_BUTTONS;
@@ -211,7 +231,7 @@ function refreshPad(): void {
   pad = readGamepads();
   // この読み取りで捕まえが終わっても、今回の押下はゲームにも操作中のデバイスにも使わない
   const wasCapturing = keyConfig.isCapturing();
-  if (wasCapturing) capturePending = true;
+  if (wasCapturing) gate = gateSawCapturing(gate);
   // 練習以外の画面のボタンは、キーコンフィグの割り当てに使わない
   if (screens.current() === 'game') {
     for (const i of pad.rawPressed) if (!prevPadRaw.has(i)) keyConfig.onPadButton(i);
@@ -248,11 +268,8 @@ function stepFrame(end: number): void {
   for (const t of downTimes) metrics.onKeyLatency(processedAt - t);
   // キーコンフィグで入力待ちの間と、その間に押していた入力を離すまでは、ゲームの入力に使わない
   const capturing = keyConfig.isCapturing();
-  // 捕まえが終わったのを見つけたフレームだけ、捕まえ中として扱う。
-  // キーで終えた場合、そのキーは captureNext が受け取るので timeline に入らず、
-  // パッドで終えた場合も、そのボタンはこのフレームに出る。だから 1 フレームで足りる
-  const justEndedCapture = !capturing && capturePending;
-  capturePending = capturing;
+  const gated = gateFrame(gate, { capturing, onGameScreen: screens.current() === 'game', frameEnd: end });
+  gate = gated.state;
   const filtered = filterInput(
     {
       keys: pressed,
@@ -261,14 +278,15 @@ function stepFrame(end: number): void {
       padDirs: new Set<PadDir>(DIRECTION_NAMES.filter((d) => pad.dirs[d])),
     },
     ignore,
-    capturing || justEndedCapture || taintSince !== null || screens.current() !== 'game',
+    gated.block,
   );
   ignore = filtered.ignore;
-  if (!capturing && taintSince !== null && end > taintSince) taintSince = null;
   const { input } = filtered;
-  const on = (d: PadDir): boolean => input.keys.has(bindings.keys[d]) || input.padDirs.has(d);
+  const on = (d: PadDir): boolean => input.keys.has(bindings.keys[d] as string) || input.padDirs.has(d);
   const dir = resolveDirection({ up: on('up'), down: on('down'), left: on('left'), right: on('right') }, 'neutral');
-  const buttons = BUTTON_NAMES.filter((b) => input.keys.has(bindings.keys[b]) || input.padButtons.has(bindings.pad[b]));
+  const buttons = profile.buttons.filter(
+    (b) => input.keys.has(bindings.keys[b] as string) || input.padButtons.has(bindings.pad[b] as number),
+  );
   history.push({ dir, buttons });
   if (history.length > MAX_FRAMES) history.shift();
 

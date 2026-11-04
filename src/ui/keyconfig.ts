@@ -1,5 +1,6 @@
 import type { Device } from '../input/activeDevice';
-import { ACTIONS, BUTTON_NAMES, assignKey, assignPad, saveBindings, type Action, type Bindings } from '../input/bindings';
+import type { GameProfile } from '../core/profiles';
+import { actionsFor, assignKey, assignPad, saveBindings, type Action, type Bindings } from '../input/bindings';
 import type { PadDir } from '../input/captureFilter';
 import { resolveDirection, type PressedDirs } from '../input/direction';
 import type { PadInfo } from '../input/gamepad';
@@ -20,6 +21,8 @@ export interface KeyConfig {
   readonly isCapturing: () => boolean;
   /** 入力待ち・一括設定を、割り当てを変えずに終える（表示も元に戻す）。捕まえ中でなければ何もしない */
   readonly cancel: () => void;
+  /** ゲームを切り替える。一覧・図・まとめて設定をそのゲームのボタンにし、捕まえ中なら取り消す */
+  readonly setProfile: (profile: GameProfile, bindings: Bindings) => void;
 }
 
 type ViewMode = 'auto' | WizardTarget;
@@ -28,8 +31,6 @@ const ARROWS: Readonly<Record<number, string>> = { 1: '↙', 2: '↓', 3: '↘',
 const PAD_DIR_BUTTONS: Readonly<Record<PadDir, number>> = { up: 12, down: 13, left: 14, right: 15 };
 const GUIDE = '操作の名前をクリックすると、その操作だけ直せます（Esc で取り消し）。';
 
-const isButtonAction = (a: Action): a is (typeof BUTTON_NAMES)[number] => (BUTTON_NAMES as readonly string[]).includes(a);
-
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
   if (className) e.className = className;
@@ -37,7 +38,16 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, t
   return e;
 }
 
-export function createKeyConfig(root: HTMLElement, bindings: Bindings, keyboard: KeyboardReader): KeyConfig {
+export function createKeyConfig(
+  root: HTMLElement,
+  initialProfile: GameProfile,
+  initialBindings: Bindings,
+  keyboard: KeyboardReader,
+): KeyConfig {
+  let profile = initialProfile;
+  let bindings = initialBindings;
+  const isButtonAction = (a: Action): boolean => profile.buttons.includes(a);
+
   const section = el('section', 'keyconfig');
   const deviceLine = el('div', 'kc-device');
   const tabs = el('div', 'kc-tabs');
@@ -108,10 +118,10 @@ export function createKeyConfig(root: HTMLElement, bindings: Bindings, keyboard:
     if (kind === 'keyboard') {
       dirs = { up: false, down: false, left: false, right: false };
       buttons = [];
-      for (const a of ACTIONS) {
-        if (!held.has(bindings.keys[a])) continue;
+      for (const a of actionsFor(profile)) {
+        if (!held.has(bindings.keys[a] as string)) continue;
         if (isButtonAction(a)) buttons.push(a);
-        else dirs[a] = true;
+        else dirs[a as keyof PressedDirs] = true;
       }
       signature = `k:${quiet ? '-' : ''}${[...held].sort().join(',')}`;
       keyboardDiagram.setPressed(quiet ? new Set() : held);
@@ -125,7 +135,7 @@ export function createKeyConfig(root: HTMLElement, bindings: Bindings, keyboard:
         left: pressed.has(PAD_DIR_BUTTONS.left) || !!stick?.left,
         right: pressed.has(PAD_DIR_BUTTONS.right) || !!stick?.right,
       };
-      buttons = BUTTON_NAMES.filter((b) => pressed.has(bindings.pad[b]));
+      buttons = profile.buttons.filter((b) => pressed.has(bindings.pad[b] as number));
       const sx = Math.round((p?.stick.x ?? 0) * 20);
       const sy = Math.round((p?.stick.y ?? 0) * 20);
       signature = `p:${quiet ? '-' : ''}${p?.index ?? '-'}:${[...pressed].join(',')}:${sx},${sy}`;
@@ -178,25 +188,28 @@ export function createKeyConfig(root: HTMLElement, bindings: Bindings, keyboard:
     const target = targetAction();
 
     const keyMap = new Map<string, string>();
-    for (const a of ACTIONS) keyMap.set(bindings.keys[a], actionName(a));
+    const actions = actionsFor(profile);
+    for (const a of actions) keyMap.set(bindings.keys[a] as string, actionName(a));
     keyboardDiagram.setAssigned(keyMap);
-    keyboardDiagram.setTarget(target && wizard === null ? bindings.keys[target] : null);
-    const missingKeys = ACTIONS.filter((a) => !keyboardDiagram.has(bindings.keys[a]));
+    keyboardDiagram.setTarget(target && wizard === null ? (bindings.keys[target] ?? null) : null);
+    const missingKeys = actions.filter((a) => !keyboardDiagram.has(bindings.keys[a] as string));
     missing.textContent =
       kind === 'keyboard' && missingKeys.length > 0
-        ? `図にないキー: ${missingKeys.map((a) => `${keyLabel(bindings.keys[a])} = ${actionName(a)}`).join('、')}`
+        ? `図にないキー: ${missingKeys.map((a) => `${keyLabel(bindings.keys[a] as string)} = ${actionName(a)}`).join('、')}`
         : '';
 
     const family = padFamily();
     padDiagram.setFamily(family);
-    padDiagram.setAssigned(new Map(BUTTON_NAMES.map((b) => [bindings.pad[b], b] as const)));
-    padDiagram.setTarget(target && wizard === null && isButtonAction(target) ? bindings.pad[target] : null);
+    padDiagram.setAssigned(new Map(profile.buttons.map((b) => [bindings.pad[b] as number, b] as const)));
+    padDiagram.setTarget(target && wizard === null && isButtonAction(target) ? (bindings.pad[target] ?? null) : null);
 
     actionList.replaceChildren();
-    for (const a of kind === 'keyboard' ? ACTIONS : BUTTON_NAMES) {
+    for (const a of kind === 'keyboard' ? actions : profile.buttons) {
       const b = el('button', a === target ? 'waiting' : undefined);
       const bound =
-        kind === 'keyboard' || !isButtonAction(a) ? keyLabel(bindings.keys[a]) : padButtonLabel(family, bindings.pad[a]);
+        kind === 'keyboard' || !isButtonAction(a)
+          ? keyLabel(bindings.keys[a] as string)
+          : padButtonLabel(family, bindings.pad[a] as number);
       b.textContent = `${actionName(a)}: ${bound}`;
       b.addEventListener('click', () => startSingle(a));
       actionList.append(b);
@@ -261,7 +274,7 @@ export function createKeyConfig(root: HTMLElement, bindings: Bindings, keyboard:
       const result = wizardResult(wizard, bindings);
       bindings.keys = result.keys;
       bindings.pad = result.pad;
-      saveBindings(bindings);
+      saveBindings(profile, bindings);
       stopCapture();
       say('設定しました');
     }
@@ -270,7 +283,7 @@ export function createKeyConfig(root: HTMLElement, bindings: Bindings, keyboard:
 
   const finishSingle = (text: string): void => {
     stopCapture();
-    saveBindings(bindings);
+    saveBindings(profile, bindings);
     say(text);
     render();
   };
@@ -289,7 +302,7 @@ export function createKeyConfig(root: HTMLElement, bindings: Bindings, keyboard:
     blurFocus();
     stopCapture();
     const target = viewKind();
-    wizard = startWizard(target);
+    wizard = startWizard(target, profile);
     lock = target;
     say(GUIDE);
     armKeyboard();
@@ -353,5 +366,13 @@ export function createKeyConfig(root: HTMLElement, bindings: Bindings, keyboard:
     },
     isCapturing: capturing,
     cancel,
+    setProfile: (nextProfile, nextBindings) => {
+      // 捕まえ中の表示も、割り当てを変えずに元へ戻す
+      stopCapture();
+      say(GUIDE);
+      profile = nextProfile;
+      bindings = nextBindings;
+      render();
+    },
   };
 }

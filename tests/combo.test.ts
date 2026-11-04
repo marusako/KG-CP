@@ -8,7 +8,8 @@ import {
 } from '../src/core/combo';
 import type { ComboRecipe, TrialEvent, TrialState } from '../src/core/combo';
 import { parseStep } from '../src/core/notation';
-import { DEFAULT_COMMANDS } from '../src/core/commands';
+import { SF6_COMMANDS } from '../src/core/commands';
+import { PROFILES } from '../src/core/profiles';
 import type { Direction, FrameInput } from '../src/core/types';
 
 const JAPANESE = /[぀-ヿ一-鿿]/;
@@ -17,7 +18,7 @@ const f = (dir: Direction, ...buttons: string[]): FrameInput => ({ dir, buttons 
 const N = f(5);
 
 function step(text: string) {
-  const r = parseStep(text, DEFAULT_COMMANDS);
+  const r = parseStep(text, PROFILES.sf6);
   if (!r.ok) throw new Error(`${text}: ${r.error}`);
   return r.input;
 }
@@ -28,7 +29,7 @@ function recipe(...steps: [string, [number, number]?][]): ComboRecipe {
     name: 'テスト',
     steps: steps.map(([input, window]) => (window ? { input, window } : { input })),
   };
-  const r = parseRecipe(json, DEFAULT_COMMANDS);
+  const r = parseRecipe(json, PROFILES.sf6);
   if (!r.ok) throw new Error(r.error);
   return r.recipe;
 }
@@ -140,7 +141,7 @@ describe('parseRecipe (受け入れ条件 3)', () => {
   };
 
   it('正しい JSON を読む', () => {
-    const r = parseRecipe(valid, DEFAULT_COMMANDS);
+    const r = parseRecipe(valid, PROFILES.sf6);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.recipe.id).toBe('sample-1');
@@ -158,20 +159,20 @@ describe('parseRecipe (受け入れ条件 3)', () => {
   it('最初の手の window は無視して null にする', () => {
     const r = parseRecipe(
       { id: 'a', name: 'b', steps: [{ input: '2LP', window: [3, 4] }, { input: '2LP', window: [1, 2] }] },
-      DEFAULT_COMMANDS,
+      PROFILES.sf6,
     );
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.recipe.steps[0]!.window).toBeNull();
   });
 
   it('手が1つだけのレシピは window なしで読める', () => {
-    expect(parseRecipe({ id: 'a', name: 'b', steps: [{ input: '5MP' }] }, DEFAULT_COMMANDS).ok).toBe(true);
+    expect(parseRecipe({ id: 'a', name: 'b', steps: [{ input: '5MP' }] }, PROFILES.sf6).ok).toBe(true);
   });
 
   it('min == max や 0 の窓も読める', () => {
     const r = parseRecipe(
       { id: 'a', name: 'b', steps: [{ input: '2LP' }, { input: '2LP', window: [0, 0] }] },
-      DEFAULT_COMMANDS,
+      PROFILES.sf6,
     );
     expect(r.ok).toBe(true);
   });
@@ -202,7 +203,7 @@ describe('parseRecipe (受け入れ条件 3)', () => {
   ];
   for (const [label, json] of badCases) {
     it(`${label} は ok:false で日本語のエラー`, () => {
-      const r = parseRecipe(json, DEFAULT_COMMANDS);
+      const r = parseRecipe(json, PROFILES.sf6);
       expect(r.ok).toBe(false);
       if (!r.ok) expect(r.error).toMatch(JAPANESE);
     });
@@ -215,7 +216,7 @@ describe('parseRecipe (受け入れ条件 3)', () => {
         name: 'b',
         steps: [{ input: '2LP' }, { input: '2LP', window: [1, 2] }, { input: '2LP', window: [5, 4] }],
       },
-      DEFAULT_COMMANDS,
+      PROFILES.sf6,
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toContain('3');

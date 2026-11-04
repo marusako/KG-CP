@@ -1,7 +1,7 @@
 import { analyzeAttempt, justPressedAny } from './detect';
 import { parseStep } from './notation';
-import type { StepInput } from './notation';
-import type { CommandDef, FrameInput } from './types';
+import type { NotationRules, StepInput } from './notation';
+import type { FrameInput } from './types';
 
 export type { StepInput } from './notation';
 
@@ -34,7 +34,7 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v !== '';
 const isFrameCount = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
 
-export function parseRecipe(json: unknown, commands: readonly CommandDef[]): ParseResult {
+export function parseRecipe(json: unknown, rules: NotationRules): ParseResult {
   const fail = (error: string): ParseResult => ({ ok: false, error });
   if (!isRecord(json)) return fail('レシピはオブジェクトで書いてください');
   if (!isNonEmptyString(json.id)) return fail('id は空でない文字列にしてください');
@@ -49,7 +49,7 @@ export function parseRecipe(json: unknown, commands: readonly CommandDef[]): Par
     const raw: unknown = json.steps[i];
     if (!isRecord(raw)) return fail(`${n}手目: オブジェクトで書いてください`);
     if (typeof raw.input !== 'string') return fail(`${n}手目: input は文字列で書いてください`);
-    const parsed = parseStep(raw.input, commands);
+    const parsed = parseStep(raw.input, rules);
     if (!parsed.ok) return fail(`${n}手目: ${parsed.error}`);
     const text = raw.input.trim();
 

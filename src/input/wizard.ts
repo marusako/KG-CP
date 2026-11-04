@@ -1,9 +1,10 @@
-import { ACTIONS, BUTTON_NAMES, type Action, type Bindings } from './bindings';
+import type { GameProfile } from '../core/profiles';
+import { actionsFor, type Action, type Bindings } from './bindings';
 
 export type WizardTarget = 'keyboard' | 'pad';
 export interface WizardState {
   readonly target: WizardTarget;
-  /** keyboard は ACTIONS、pad は BUTTON_NAMES（方向は十字キーとスティックで固定） */
+  /** keyboard は actionsFor(profile)、pad は profile.buttons（方向は十字キーとスティックで固定） */
   readonly actions: readonly Action[];
   /** 次に聞く操作の番号 */
   readonly index: number;
@@ -14,20 +15,17 @@ export interface WizardState {
   readonly done: boolean;
 }
 
-const ACTION_NAMES: Readonly<Record<Action, string>> = {
-  up: '上', down: '下', left: '左', right: '右',
-  LP: 'LP', MP: 'MP', HP: 'HP', LK: 'LK', MK: 'MK', HK: 'HK',
-};
+const DIRECTION_LABELS: Readonly<Record<string, string>> = { up: '上', down: '下', left: '左', right: '右' };
 
-/** 操作の表示名 */
+/** 操作の表示名。方向は「上・下・左・右」、ボタンは名前そのまま */
 export function actionName(action: Action): string {
-  return ACTION_NAMES[action];
+  return DIRECTION_LABELS[action] ?? action;
 }
 
-export function startWizard(target: WizardTarget): WizardState {
+export function startWizard(target: WizardTarget, profile: GameProfile): WizardState {
   return {
     target,
-    actions: target === 'keyboard' ? ACTIONS : BUTTON_NAMES,
+    actions: target === 'keyboard' ? actionsFor(profile) : profile.buttons,
     index: 0,
     picked: [],
     error: null,
@@ -56,7 +54,7 @@ export function wizardResult(state: WizardState, current: Bindings): Bindings {
   state.actions.forEach((action, i) => {
     const v = state.picked[i];
     if (state.target === 'keyboard' && typeof v === 'string') keys[action] = v;
-    if (state.target === 'pad' && typeof v === 'number') pad[action as (typeof BUTTON_NAMES)[number]] = v;
+    if (state.target === 'pad' && typeof v === 'number') pad[action] = v;
   });
   return { keys, pad };
 }

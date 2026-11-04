@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { compressHistory, historyAfterStall } from '../src/core/history';
 import { justPressedAny, analyzeAttempt } from '../src/core/detect';
-import { DEFAULT_COMMANDS } from '../src/core/commands';
+import { SF6_COMMANDS } from '../src/core/commands';
 import type { Direction, FrameInput } from '../src/core/types';
 
 const f = (dir: Direction, ...buttons: string[]): FrameInput => ({ dir, buttons });
@@ -77,7 +77,7 @@ describe('compressHistory (受け入れ条件 4)', () => {
 });
 
 describe('historyAfterStall (受け入れ条件 1)', () => {
-  const p236 = DEFAULT_COMMANDS.find((c) => c.id === '236P')!;
+  const p236 = SF6_COMMANDS.find((c) => c.id === '236P')!;
 
   it('空の履歴は空の配列', () => {
     expect(historyAfterStall([])).toEqual([]);

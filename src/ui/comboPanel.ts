@@ -1,8 +1,8 @@
 import { initialTrialState, isAttemptInProgress, parseRecipe, stepTrial } from '../core/combo';
 import type { ComboRecipe, TrialEvent, TrialState } from '../core/combo';
-import type { CommandDef, FrameInput } from '../core/types';
-
-const STORAGE_KEY = 'kgcp.comboRecipes';
+import type { GameProfile } from '../core/profiles';
+import { readFirst, recipesKeys } from '../core/storageKeys';
+import type { FrameInput } from '../core/types';
 
 export function describeDrop(e: Extract<TrialEvent, { type: 'drop' }>, recipe: ComboRecipe): string {
   switch (e.reason) {
@@ -39,16 +39,17 @@ interface SavedData {
   unreadable: unknown[];
 }
 
-function loadSaved(commands: readonly CommandDef[], sampleIds: ReadonlySet<string>): SavedData {
+function loadSaved(profile: GameProfile, sampleIds: ReadonlySet<string>): SavedData {
   const empty: SavedData = { recipes: [], unreadable: [] };
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    // 保存場所は recipesKeys のとおり（sf6 だけは、なければ前の版のキーも読む）
+    const raw = readFirst((k) => localStorage.getItem(k), recipesKeys(profile.id).read);
     if (!raw) return empty;
     const list: unknown = JSON.parse(raw);
     if (!Array.isArray(list)) return empty;
     const out: SavedData = { recipes: [], unreadable: [] };
     for (const j of list) {
-      const r = parseRecipe(j, commands);
+      const r = parseRecipe(j, profile);
       // サンプルと同じ id のものは一覧に2つ並ぶので、読めなかった扱いにする
       if (r.ok && !sampleIds.has(r.recipe.id)) out.recipes.push(r.recipe);
       else out.unreadable.push(j);
@@ -59,10 +60,10 @@ function loadSaved(commands: readonly CommandDef[], sampleIds: ReadonlySet<strin
   }
 }
 
-function save(recipes: readonly ComboRecipe[], unreadable: readonly unknown[]): boolean {
+function save(profile: GameProfile, recipes: readonly ComboRecipe[], unreadable: readonly unknown[]): boolean {
   try {
     const list = [...recipes.map((r) => JSON.parse(toJson(r)) as unknown), ...unreadable];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    localStorage.setItem(recipesKeys(profile.id).save, JSON.stringify(list));
     return true;
   } catch {
     return false;
@@ -76,12 +77,13 @@ export interface ComboPanel {
   readonly reset: () => void;
   /** 挑戦の途中なら、最初の手に戻して理由を表示する（処理が止まったときなど）。途中でなければ何もしない */
   readonly invalidate: (reason: string) => void;
+  /** ゲームを切り替える。サンプル・表記のルール・保存したレシピを入れ替え、先頭のレシピを選び、回数を 0 にする */
+  readonly setProfile: (profile: GameProfile) => void;
 }
 
 export function createComboPanel(
   root: HTMLElement,
-  commands: readonly CommandDef[],
-  samples: readonly ComboRecipe[],
+  initialProfile: GameProfile,
 ): ComboPanel {
   const section = document.createElement('section');
   const title = document.createElement('h2');
@@ -109,13 +111,11 @@ export function createComboPanel(
   section.append(title, list, stepsView, result, stats, jsonArea, jsonButtons, message);
   root.append(section);
 
-  const saved = loadSaved(commands, new Set(samples.map((s) => s.id)));
-  const recipes: ComboRecipe[] = [...samples, ...saved.recipes];
-  if (saved.unreadable.length > 0) {
-    message.className = 'note error';
-    message.textContent = `読めなかった保存レシピが ${saved.unreadable.length} 件あります（データは消さずに残しています）`;
-  }
-  let current = recipes[0] as ComboRecipe;
+  let profile = initialProfile;
+  let samples: readonly ComboRecipe[] = [];
+  let saved: SavedData = { recipes: [], unreadable: [] };
+  let recipes: ComboRecipe[] = [];
+  let current = initialProfile.samples[0] as ComboRecipe;
   let state: TrialState = initialTrialState();
   let attempts = 0;
   let completes = 0;
@@ -187,7 +187,7 @@ export function createComboPanel(
       message.textContent = `JSON として読めません: ${e instanceof Error ? e.message : String(e)}`;
       return;
     }
-    const r = parseRecipe(json, commands);
+    const r = parseRecipe(json, profile);
     if (!r.ok) {
       message.className = 'note error';
       message.textContent = r.error;
@@ -204,7 +204,7 @@ export function createComboPanel(
     current = r.recipe;
     attempts = 0;
     completes = 0;
-    const ok = save(recipes.slice(samples.length), saved.unreadable);
+    const ok = save(profile, recipes.slice(samples.length), saved.unreadable);
     message.className = 'note';
     message.textContent = ok
       ?`「${r.recipe.name}」を読み込みました`
@@ -220,12 +220,32 @@ export function createComboPanel(
     message.textContent = '選んでいるレシピを書き出しました';
   });
 
-  renderList();
-  renderStats();
-  reset();
+  /** ゲームの設定に合わせて、レシピの一覧と保存データを読み直す */
+  const applyProfile = (next: GameProfile) => {
+    profile = next;
+    samples = next.samples;
+    saved = loadSaved(next, new Set(samples.map((s) => s.id)));
+    recipes = [...samples, ...saved.recipes];
+    current = recipes[0] as ComboRecipe;
+    attempts = 0;
+    completes = 0;
+    jsonArea.value = '';
+    if (saved.unreadable.length > 0) {
+      message.className = 'note error';
+      message.textContent = `読めなかった保存レシピが ${saved.unreadable.length} 件あります（データは消さずに残しています）`;
+    } else {
+      message.className = 'note';
+      message.textContent = '';
+    }
+    renderList();
+    renderStats();
+    reset();
+  };
+  applyProfile(initialProfile);
 
   return {
     reset,
+    setProfile: applyProfile,
     invalidate: (reason) => {
       if (!isAttemptInProgress(state)) return;
       reset();

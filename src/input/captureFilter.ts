@@ -65,3 +65,42 @@ export function filterInput(
     ignore: next,
   };
 }
+
+export interface GateState {
+  /** 前に見たとき、キーコンフィグが捕まえ中だった */
+  capturePending: boolean;
+  /** game に入った時刻。frameEnd がこれより後のフレームを 1 つ処理し終えるまで捨てる。null なら不要 */
+  taintSince: number | null;
+}
+
+export const INITIAL_GATE: GateState = { capturePending: false, taintSince: null };
+
+/**
+ * game に入ったとき。決定に使った入力を押したまま入っても練習に漏れないよう、
+ * 入った時刻より後に終わるフレームを 1 つ処理するまでは捕まえ中として扱う
+ */
+export function gateEnterGame(state: GateState, now: number): GateState {
+  return { ...state, taintSince: now };
+}
+
+/** パッドを読んだ時点で捕まえ中だったとき（そのあと同じ読み取りで捕まえが終わっても、終わったフレームを捨てるため） */
+export function gateSawCapturing(state: GateState): GateState {
+  return { ...state, capturePending: true };
+}
+
+/**
+ * 1 フレームごとに呼ぶ。block が true なら、このフレームの入力は filterInput の capturing を true にする。
+ * 捕まえが終わったのを見つけたフレームだけ block する。キーで終えた場合、そのキーは captureNext が受け取るので
+ * timeline に入らず、パッドで終えた場合もそのボタンはこのフレームに出る。だから 1 フレームで足りる
+ */
+export function gateFrame(
+  state: GateState,
+  frame: { capturing: boolean; onGameScreen: boolean; frameEnd: number },
+): { block: boolean; state: GateState } {
+  const { capturing, onGameScreen, frameEnd } = frame;
+  const justEnded = !capturing && state.capturePending;
+  const block = capturing || justEnded || state.taintSince !== null || !onGameScreen;
+  const taintSince =
+    !capturing && state.taintSince !== null && frameEnd > state.taintSince ? null : state.taintSince;
+  return { block, state: { capturePending: capturing, taintSince } };
+}

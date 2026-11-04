@@ -19,6 +19,8 @@ export type CommandDef =
       kind: 'motion';
       id: string;
       name: string;
+      /** 表記のときの方向の部分 例: '236'、'[4]6' */
+      notation: string;
       steps: readonly MotionStep[];
       /** どれか1つの押下で成立 */
       buttons: readonly string[];
@@ -32,6 +34,8 @@ export type CommandDef =
       kind: 'rotation';
       id: string;
       name: string;
+      /** 表記のときの方向の部分 例: '360' */
+      notation: string;
       buttons: readonly string[];
       /** ボタン押下フレームから何フレーム前まで見るか */
       motionWindow: number;
