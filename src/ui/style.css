@@ -1,0 +1,18 @@
+body { margin: 0; font-family: system-ui, sans-serif; background: #15171c; color: #e8e8e8; }
+#app { display: flex; gap: 24px; padding: 16px; align-items: flex-start; flex-wrap: wrap; }
+section { background: #1f222a; border-radius: 8px; padding: 12px 16px; min-width: 260px; }
+h2 { font-size: 15px; margin: 0 0 8px; }
+.history-row { display: flex; gap: 8px; align-items: center; font-variant-numeric: tabular-nums; height: 24px; }
+.history-dir { width: 24px; text-align: center; font-size: 20px; }
+.history-btn { color: #ffd166; min-width: 80px; }
+.history-frames { margin-left: auto; color: #9aa; }
+.history-panel { width: 280px; }
+.command-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.command-list button.active { background: #3a5a9a; }
+button { background: #2c303a; color: inherit; border: 1px solid #444; border-radius: 4px; padding: 6px 10px; cursor: pointer; }
+.result { min-height: 48px; padding: 8px; border-radius: 4px; background: #15171c; }
+.result.ok { color: #6bd96b; }
+.result.ng { color: #ff6b6b; }
+.keyconfig { display: grid; grid-template-columns: auto auto auto; gap: 4px 8px; align-items: center; }
+.keyconfig .waiting { background: #9a6a1a; }
+.note { color: #9aa; font-size: 12px; margin-top: 8px; }
