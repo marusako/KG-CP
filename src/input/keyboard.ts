@@ -1,5 +1,10 @@
 import { ACTIONS, type Action, type Bindings } from './bindings';
 
+/** 文字入力用の要素から来たイベントか（ゲーム入力として扱わない） */
+function isTextTarget(t: EventTarget | null): boolean {
+  return t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+}
+
 /** キーボードの押下状態を保持する */
 export class KeyboardReader {
   private down = new Set<string>();
@@ -8,6 +13,7 @@ export class KeyboardReader {
 
   constructor(target: Window) {
     target.addEventListener('keydown', (e) => {
+      if (isTextTarget(e.target)) return;
       if (this.captureNext) {
         e.preventDefault();
         const cb = this.captureNext;

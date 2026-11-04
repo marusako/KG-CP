@@ -16,3 +16,14 @@ button { background: #2c303a; color: inherit; border: 1px solid #444; border-rad
 .keyconfig { display: grid; grid-template-columns: auto auto auto; gap: 4px 8px; align-items: center; }
 .keyconfig .waiting { background: #9a6a1a; }
 .note { color: #9aa; font-size: 12px; margin-top: 8px; }
+.tabs { flex-basis: 100%; display: flex; gap: 4px; }
+.tabs button.active { background: #3a5a9a; }
+.tab-pane { display: contents; }
+.tab-pane[hidden] { display: none; }
+.combo-steps { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.combo-step { border: 2px solid #444; border-radius: 6px; padding: 6px 10px; min-width: 64px; text-align: center; }
+.combo-step.next { border-color: #ffd166; }
+.combo-step.hit { border-color: #6bd96b; color: #6bd96b; }
+.combo-step.drop { border-color: #ff6b6b; color: #ff6b6b; }
+.note.error { color: #ff6b6b; }
+textarea { display: block; margin: 12px 0 8px; background: #15171c; color: inherit; border: 1px solid #444; }

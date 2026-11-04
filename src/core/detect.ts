@@ -9,12 +9,16 @@ const ROTATION_GROUPS: readonly (readonly [RotationGroup, readonly Direction[]])
   ['up', [7, 8, 9]],
 ];
 
-/** いまのフレーム（最後の要素）で def.buttons のどれかが押された瞬間か */
-function justPressed(history: readonly FrameInput[], def: CommandDef): boolean {
+/** いまのフレーム（最後の要素）で buttons のどれかが押された瞬間か */
+export function justPressedAny(history: readonly FrameInput[], buttons: readonly string[]): boolean {
   const cur = history[history.length - 1];
   if (!cur) return false;
   const prev = history[history.length - 2];
-  return def.buttons.some((b) => cur.buttons.includes(b) && !(prev?.buttons.includes(b) ?? false));
+  return buttons.some((b) => cur.buttons.includes(b) && !(prev?.buttons.includes(b) ?? false));
+}
+
+function justPressed(history: readonly FrameInput[], def: CommandDef): boolean {
+  return justPressedAny(history, def.buttons);
 }
 
 /**
