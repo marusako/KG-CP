@@ -62,10 +62,39 @@ describe('analyzeAttempt: 成立 (受け入れ条件 1)', () => {
     expect(analyzeAttempt(h, motion236(10, 3))).toMatchObject({ ok: true });
   });
 
-  it('同じ方向が続くとき、最後の手は B 以下で最も新しいフレームになる', () => {
-    // 6 が 3 フレーム続く。最後の手 = フレーム4 (B)。3 = フレーム1、2 = フレーム0
+  it('同じ方向が続くとき、最後の手は「続いている区間の先頭」になり、前の手はその手前から探す', () => {
+    // 6 が 3 フレーム続く (フレーム2〜4)。最後の手 = 区間の先頭 = フレーム2。3 = フレーム1、2 = フレーム0
     const h = frames(2, 3, 6, 6, [6, LP]);
-    expect(analyzeAttempt(h, motion236(10, 3))).toEqual({ ok: true, motionFrames: 4, buttonDelay: 0 });
+    expect(analyzeAttempt(h, motion236(10, 3))).toEqual({ ok: true, motionFrames: 2, buttonDelay: 2 });
+  });
+});
+
+describe('analyzeAttempt: 最後の手は「入った瞬間」で数える (受け入れ条件 9)', () => {
+  it('例1: 2,3 のあと 6 を 20F 押し続けて P → too-slow ではなく button-late', () => {
+    const h = frames(2, 3, ...rep(6, 19), [6, LP]);
+    expect(analyzeAttempt(h, motion236(15, 6))).toEqual({ ok: false, reason: 'button-late', buttonDelay: 19 });
+  });
+
+  it('例2: 2,3,6,6,6 の最後の 6 で P → motionFrames 2、buttonDelay 2', () => {
+    const h = frames(2, 3, 6, 6, [6, LP]);
+    expect(analyzeAttempt(h, motion236(15, 6))).toEqual({ ok: true, motionFrames: 2, buttonDelay: 2 });
+  });
+
+  it('境界: 最後の手を押し続けた結果 buttonDelay がちょうど buttonWindow なら成立', () => {
+    // 6 がフレーム2〜8 (7F)。lastFrame = 2、B = 8 → buttonDelay 6
+    const h = frames(2, 3, ...rep(6, 6), [6, LP]);
+    expect(analyzeAttempt(h, motion236(15, 6))).toEqual({ ok: true, motionFrames: 2, buttonDelay: 6 });
+  });
+
+  it('境界: 最後の手を押し続けた結果 buttonWindow を 1 超えると button-late', () => {
+    // 6 がフレーム2〜9 (8F)。lastFrame = 2、B = 9 → buttonDelay 7
+    const h = frames(2, 3, ...rep(6, 7), [6, LP]);
+    expect(analyzeAttempt(h, motion236(15, 6))).toEqual({ ok: false, reason: 'button-late', buttonDelay: 7 });
+  });
+
+  it('最後の手を押し続けても、モーション自体が遅ければ too-slow のまま (too-slow が先)', () => {
+    const h = frames(2, ...rep(5, 20), 3, ...rep(6, 10), [6, LP]);
+    expect(analyzeAttempt(h, motion236(15, 6))).toMatchObject({ ok: false, reason: 'too-slow' });
   });
 });
 
@@ -213,7 +242,7 @@ describe('analyzeAttempt: 溜め (minHold)', () => {
     expect(analyzeAttempt(h, def)).toMatchObject({ ok: true });
   });
 
-  it('溜めが最初の手でなくても (例: [2]8K 型) 溜め不足を検出する', () => {
+  it('溜めが最初の手の [2]8K 型でも溜め不足を検出する', () => {
     const def: CommandDef = {
       kind: 'motion',
       id: 'test-[2]8K',
@@ -225,6 +254,46 @@ describe('analyzeAttempt: 溜め (minHold)', () => {
     };
     const h = frames(2, 2, 2, 8, [8, ['LK']]);
     expect(analyzeAttempt(h, def)).toEqual({ ok: false, reason: 'charge-short', heldFrames: 3 });
+  });
+
+  describe('溜めが 2 手目 (最後の手) にある場合', () => {
+    function secondStepCharge(minHold: number): CommandDef {
+      return {
+        kind: 'motion',
+        id: 'test-2[8]',
+        name: 'test 2[8]',
+        steps: [{ dirs: [2] }, { dirs: [8], minHold }],
+        buttons: ['LK'],
+        motionWindow: 10,
+        buttonWindow: 5,
+      };
+    }
+
+    it('2 手目の溜めが足りなければ charge-short と heldFrames', () => {
+      const h = frames(2, 8, [8, ['LK']]);
+      expect(analyzeAttempt(h, secondStepCharge(3))).toEqual({ ok: false, reason: 'charge-short', heldFrames: 2 });
+    });
+
+    it('2 手目の溜めがちょうど minHold なら成立', () => {
+      const h = frames(2, 8, 8, [8, ['LK']]);
+      expect(analyzeAttempt(h, secondStepCharge(3))).toMatchObject({ ok: true });
+    });
+  });
+
+  it('最後の手に minHold があるとき、heldFrames は区間の先頭ではなく f (B 以下で最も新しいフレーム) から数える', () => {
+    // 2,8,8,8,[8,LK]: 8 は フレーム1〜4。f = 4、lastFrame (区間の先頭) = 1
+    // f から数えると heldFrames = 4 (minHold 4 を満たす)。lastFrame から数えると 1 で不足になってしまう
+    const def: CommandDef = {
+      kind: 'motion',
+      id: 'test-2[8]-hold',
+      name: 'test 2[8] hold',
+      steps: [{ dirs: [2] }, { dirs: [8], minHold: 4 }],
+      buttons: ['LK'],
+      motionWindow: 10,
+      buttonWindow: 5,
+    };
+    const h = frames(2, 8, 8, 8, [8, ['LK']]);
+    expect(analyzeAttempt(h, def)).toEqual({ ok: true, motionFrames: 1, buttonDelay: 3 });
   });
 
   it('charge-short は too-slow より優先される', () => {

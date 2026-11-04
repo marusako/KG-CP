@@ -1,4 +1,4 @@
-import { ACTIONS, BUTTON_NAMES, type Action, type Bindings, saveBindings } from '../input/bindings';
+import { ACTIONS, BUTTON_NAMES, assignKey, assignPad, type Action, type Bindings, saveBindings } from '../input/bindings';
 import type { KeyboardReader } from '../input/keyboard';
 
 const LABELS: Record<Action, string> = {
@@ -19,7 +19,8 @@ export function createKeyConfig(root: HTMLElement, bindings: Bindings, keyboard:
   grid.className = 'keyconfig';
   const note = document.createElement('div');
   note.className = 'note';
-  note.textContent = '割り当てたい欄をクリックして、キーかパッドのボタンを押してください。';
+  const guide = '割り当てたい欄をクリックして、キーかパッドのボタンを押してください（Esc で取り消し）。';
+  note.textContent = guide;
   section.append(title, grid, note);
   root.append(section);
 
@@ -41,7 +42,8 @@ export function createKeyConfig(root: HTMLElement, bindings: Bindings, keyboard:
     }
   };
 
-  const finish = () => {
+  const finish = (message: string = guide) => {
+    note.textContent = message;
     waiting = null;
     keyboard.captureNext = null;
     saveBindings(bindings);
@@ -53,8 +55,13 @@ export function createKeyConfig(root: HTMLElement, bindings: Bindings, keyboard:
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     waiting = a;
     keyboard.captureNext = (code) => {
-      bindings.keys[a] = code;
-      finish();
+      if (code === 'Escape') {
+        finish();
+        return;
+      }
+      const r = assignKey(bindings.keys, a, code);
+      bindings.keys = r.keys;
+      finish(r.swappedWith ? `${LABELS[r.swappedWith]}と入れ替えました` : guide);
     };
     render();
   };
@@ -80,8 +87,9 @@ export function createKeyConfig(root: HTMLElement, bindings: Bindings, keyboard:
   return {
     onPadButton: (index) => {
       if (waiting === null || !(BUTTON_NAMES as readonly string[]).includes(waiting)) return;
-      bindings.pad[waiting as (typeof BUTTON_NAMES)[number]] = index;
-      finish();
+      const r = assignPad(bindings.pad, waiting as (typeof BUTTON_NAMES)[number], index);
+      bindings.pad = r.pad;
+      finish(r.swappedWith ? `${LABELS[r.swappedWith]}と入れ替えました` : guide);
     },
   };
 }

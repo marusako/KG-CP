@@ -31,6 +31,34 @@ export function defaultBindings(): Bindings {
   };
 }
 
+type PadButtonName = (typeof BUTTON_NAMES)[number];
+
+/** action に code を割り当てる。code を別の操作が使っていたら、その操作に action の元のキーを渡して入れ替える */
+export function assignKey(
+  keys: Readonly<Record<Action, string>>,
+  action: Action,
+  code: string,
+): { keys: Record<Action, string>; swappedWith: Action | null } {
+  const next = { ...keys };
+  const other = ACTIONS.find((a) => a !== action && keys[a] === code) ?? null;
+  if (other) next[other] = keys[action];
+  next[action] = code;
+  return { keys: next, swappedWith: other };
+}
+
+/** button に index を割り当てる。index を別のボタンが使っていたら、そのボタンに button の元の番号を渡して入れ替える */
+export function assignPad(
+  pad: Readonly<Record<PadButtonName, number>>,
+  button: PadButtonName,
+  index: number,
+): { pad: Record<PadButtonName, number>; swappedWith: PadButtonName | null } {
+  const next = { ...pad };
+  const other = BUTTON_NAMES.find((b) => b !== button && pad[b] === index) ?? null;
+  if (other) next[other] = pad[button];
+  next[button] = index;
+  return { pad: next, swappedWith: other };
+}
+
 export function loadBindings(): Bindings {
   const base = defaultBindings();
   try {

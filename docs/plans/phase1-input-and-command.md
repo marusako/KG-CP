@@ -160,6 +160,50 @@ export function stickToPressed(x: number, y: number, deadzone: number): PressedD
 7. `npm test`・`npm run typecheck`・`npm run build` がすべて終了コード 0
 8. ブラウザで開くと、キーボード入力で履歴が流れ、選んだコマンドの判定が表示される（本体が手で確認）
 
+## 変更 1（レビュー後の見直し）
+
+### A. 最後の手を「入った瞬間」で数える
+
+理由: これまでは、236 の 6 を押し続けてから P を押すと、6 を押していた時間まで `motionFrames` に入っていた。そのため、モーション自体は速くても `too-slow` と出ていた。押し続けた時間は「ボタンが遅い」の側に数えるほうが、練習する人にとって実態に合う。
+
+motion の判定ルール 1・3 を次のように変える（ほかのルールは変えない）。
+
+- 後ろから貪欲に探して最後の手のフレーム `f` を見つけたら、そこから前に向かって、方向が最後の手の `dirs` に入り続ける区間をさかのぼる。その **区間の先頭** を `lastFrame` とする
+- 1つ前の手は「`lastFrame` より前で、`dirs` に入る最も新しいフレーム」を探す
+- `motionFrames = lastFrame - firstFrame`、`buttonDelay = B - lastFrame`（式は同じ。`lastFrame` の決め方だけが変わる）
+- 最後の手に `minHold` がある場合の `heldFrames` は、これまでどおり `f` から数える
+- 前提: 隣り合う手の `dirs` は重ならない（DEFAULT_COMMANDS はすべてそうなっている）
+
+例（`motionWindow: 15, buttonWindow: 6`）:
+- 2,3 のあと 6 を 20F 押し続け、その 20F 目に P → `{ ok:false, reason:'button-late', buttonDelay:19 }`（これまでは `too-slow`）
+- 2,3,6,6,6 で、最後の 6 のフレームで P → `{ ok:true, motionFrames:2, buttonDelay:2 }`
+
+### D. 使い勝手
+
+1. **割り当ての入れ替え**: `src/input/bindings.ts` に純粋な関数を足す
+
+   ```ts
+   /** action に code を割り当てる。code を別の操作が使っていたら、その操作に action の元のキーを渡して入れ替える */
+   export function assignKey(
+     keys: Readonly<Record<Action, string>>,
+     action: Action,
+     code: string,
+   ): { keys: Record<Action, string>; swappedWith: Action | null };
+   ```
+
+   - 引数の `keys` は書き換えず、新しいオブジェクトを返す
+   - 同じ操作に同じキーを割り当て直したときは `swappedWith: null`
+   - パッドのボタン番号も同じ考えで `assignPad(pad, button, index)` を足す（返り値は `{ pad, swappedWith }`）
+   - キーコンフィグ画面は入れ替えが起きたら「◯◯と入れ替えました」と表示する
+2. **Esc で取り消し**: キーコンフィグの入力待ち中に Esc を押すと、割り当てを変えずに入力待ちを終える。Esc は割り当てられない
+3. **「0 手目」の表示**: `incomplete` で `matchedSteps` が 0 のときは「最初の手（◯）が入っていません」と表示する
+
+### 受け入れ条件（追加）
+
+9. A の例が両方そのとおりになる。最後の手を押し続けた場合、`too-slow` ではなく `button-late` になる
+10. `assignKey`・`assignPad` が入れ替えを正しく行い、引数を書き換えない
+11. 既存の受け入れ条件 1〜7 も引き続き満たす（A に合わせて既存テストの期待値を直すのは可。ただし、そのテストが確かめたかったことは残す）
+
 ## この段階でやらないこと
 
 - 2P 側（左向き）の反転、ゲーム別プリセット、コンボトライアル、アケコン・レバーレスの専用設定、デスクトップ化

@@ -8,6 +8,7 @@ export function describeResult(r: AttemptResult): string {
   if (r.ok) return `成立！ モーション ${r.motionFrames}F / ボタン遅れ ${r.buttonDelay}F`;
   switch (r.reason) {
     case 'incomplete':
+      if (r.matchedSteps === 0) return `最初の手（${r.expected.join('/')}）が入っていません`;
       return `手が足りません（${r.matchedSteps} 手目まで成功。次は ${r.expected.join('/')}）`;
     case 'too-slow':
       return `モーションが遅すぎます（${r.motionFrames}F）`;

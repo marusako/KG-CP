@@ -36,11 +36,11 @@ function analyzeMotion(
   def: Extract<CommandDef, { kind: 'motion' }>,
   b: number,
 ): AttemptResult {
-  const frames = findBackward(history, def.steps, b);
-  if (!frames) return incomplete(history, def, b);
+  const found = findBackward(history, def.steps, b);
+  if (!found) return incomplete(history, def, b);
 
-  const first = frames[0] as number;
-  const last = frames[frames.length - 1] as number;
+  const { frames, lastFrame: last } = found;
+  const first = frames.length === 1 ? last : (frames[0] as number);
 
   for (let i = 0; i < def.steps.length; i++) {
     const step = def.steps[i] as MotionStep;
@@ -56,13 +56,18 @@ function analyzeMotion(
   return { ok: true, motionFrames, buttonDelay };
 }
 
-/** 後ろから貪欲に各手のフレームを探す。全部見つからなければ null */
+/**
+ * 後ろから貪欲に各手のフレームを探す。全部見つからなければ null。
+ * frames は各手の最も新しい一致フレーム。lastFrame は最後の手の「入った瞬間」
+ * （最後の手の方向が続く区間の先頭）で、1つ前の手はそれより前から探す。
+ */
 function findBackward(
   history: readonly FrameInput[],
   steps: readonly MotionStep[],
   b: number,
-): number[] | null {
+): { frames: number[]; lastFrame: number } | null {
   const frames: number[] = [];
+  let lastFrame = b;
   let limit = b;
   for (let s = steps.length - 1; s >= 0; s--) {
     const step = steps[s] as MotionStep;
@@ -76,9 +81,18 @@ function findBackward(
     }
     if (found < 0) return null;
     frames.unshift(found);
-    limit = found - 1;
+    let entry = found;
+    if (s === steps.length - 1) {
+      while (entry > 0) {
+        const d = dirAt(history, entry - 1);
+        if (d === undefined || !step.dirs.includes(d)) break;
+        entry--;
+      }
+      lastFrame = entry;
+    }
+    limit = entry - 1;
   }
-  return frames;
+  return { frames, lastFrame };
 }
 
 /** フレーム f から前に向かって、方向が step.dirs に入り続けるフレーム数（f を含む） */
@@ -114,8 +128,10 @@ function incomplete(
     matched++;
     from = found + 1;
   }
-  const next = def.steps[matched] ?? def.steps[def.steps.length - 1];
-  return { ok: false, reason: 'incomplete', matchedSteps: matched, expected: next?.dirs ?? [] };
+  // 全手が前向き探索で揃うなら後ろ向き探索も成功するので、ここでは必ず手が残っている
+  const next = def.steps[matched];
+  if (!next) throw new Error('incomplete: unreachable (all steps matched)');
+  return { ok: false, reason: 'incomplete', matchedSteps: matched, expected: next.dirs };
 }
 
 function analyzeRotation(
