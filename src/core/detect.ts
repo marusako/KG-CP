@@ -126,12 +126,28 @@ function incomplete(
     }
     if (found < 0) break;
     matched++;
-    from = found + 1;
+    // この手の方向が続く区間を飛ばす（66 のように隣り合う手の dirs が重なる定義のため）
+    from = found + heldFramesForward(history, found, b, step);
   }
-  // 全手が前向き探索で揃うなら後ろ向き探索も成功するので、ここでは必ず手が残っている
+  // 隣り合う手の dirs が重なる定義では、後ろ向き探索が失敗しても前向きで全手が揃うことがある。
+  // そのときは最後の手が足りない扱いにする
   const next = def.steps[matched];
-  if (!next) throw new Error('incomplete: unreachable (all steps matched)');
+  if (!next) {
+    const last = def.steps[def.steps.length - 1];
+    return { ok: false, reason: 'incomplete', matchedSteps: def.steps.length - 1, expected: last?.dirs ?? [] };
+  }
   return { ok: false, reason: 'incomplete', matchedSteps: matched, expected: next.dirs };
+}
+
+/** フレーム f から b まで、方向が step.dirs に入り続けるフレーム数（f を含む） */
+function heldFramesForward(history: readonly FrameInput[], f: number, b: number, step: MotionStep): number {
+  let n = 0;
+  for (let i = f; i <= b; i++) {
+    const d = dirAt(history, i);
+    if (d === undefined || !step.dirs.includes(d)) break;
+    n++;
+  }
+  return n;
 }
 
 function analyzeRotation(

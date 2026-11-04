@@ -405,3 +405,49 @@ describe('analyzeAttempt: 押した瞬間でなければ null (受け入れ条�
     expect(analyzeAttempt(h, rotation(20))).toBeNull();
   });
 });
+
+describe('analyzeAttempt: 隣り合う手の方向が重なる定義（変更 2）', () => {
+  const dash66: CommandDef = {
+    kind: 'motion',
+    id: 'test-66',
+    name: 'test 66',
+    steps: [{ dirs: [6] }, { dirs: [6] }],
+    buttons: ['LP'],
+    motionWindow: 15,
+    buttonWindow: 6,
+  };
+
+  it('6 を押しっぱなしでは 66 にならず、例外も投げない', () => {
+    const h = frames(6, 6, [6, LP]);
+    expect(analyzeAttempt(h, dash66)).toEqual({
+      ok: false,
+      reason: 'incomplete',
+      matchedSteps: 1,
+      expected: [6],
+    });
+  });
+
+  it('6,5,6 なら 66 が成立する', () => {
+    const h = frames(6, 5, [6, LP]);
+    expect(analyzeAttempt(h, dash66)).toEqual({ ok: true, motionFrames: 2, buttonDelay: 0 });
+  });
+
+  it('前向き探索だけで全手が揃うときも例外を投げず、最後の手を expected にする', () => {
+    const def: CommandDef = {
+      kind: 'motion',
+      id: 'test-overlap',
+      name: 'test overlap',
+      steps: [{ dirs: [6] }, { dirs: [3, 6] }],
+      buttons: ['LP'],
+      motionWindow: 15,
+      buttonWindow: 6,
+    };
+    const h = frames(6, [3, LP]);
+    expect(analyzeAttempt(h, def)).toEqual({
+      ok: false,
+      reason: 'incomplete',
+      matchedSteps: 1,
+      expected: [3, 6],
+    });
+  });
+});
