@@ -49,13 +49,21 @@ const tableOf = (lang: Lang): Table => {
   return msg() as unknown as Table;
 };
 
+/**
+ * 数でない引数を取る関数の代表の引数（第9段階で追加）。ここにない関数は (3, 4, 5, 6) で呼ぶ。
+ * meterRunsText は区間の配列を受け取る（空の配列なら '' を返す決まりなので、空でない配列を渡す）
+ */
+const SPECIAL_ARGS: Readonly<Record<string, readonly unknown[]>> = {
+  meterRunsText: [[{ dir: 2, frames: 3, pressed: [] }, { dir: 6, frames: 2, pressed: ['P'] }]],
+};
+
 /** 関数は代表の引数（数）で呼んで文字列にする。入れ子のオブジェクトは辿る */
 function flatten(table: Table, prefix = ''): [string, string][] {
   const out: [string, string][] = [];
   for (const [k, v] of Object.entries(table)) {
     const key = prefix + k;
     if (typeof v === 'function') {
-      const r = (v as (...a: unknown[]) => unknown)(3, 4, 5, 6);
+      const r = (v as (...a: unknown[]) => unknown)(...(SPECIAL_ARGS[key] ?? [3, 4, 5, 6]));
       out.push([key, typeof r === 'string' ? r : `<文字列でない: ${typeof r}>`]);
     } else if (typeof v === 'string') {
       out.push([key, v]);

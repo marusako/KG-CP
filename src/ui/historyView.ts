@@ -1,11 +1,6 @@
 import { msg } from '../i18n/messages';
 import type { HistoryEntry } from '../core/history';
-import type { Direction } from '../core/types';
-
-// 5（ニュートラル）は中黒で表す。中黒は記号なので、日本語の文字列が残っていないかのテストでは数えない
-const ARROWS: Record<Direction, string> = {
-  1: '↙', 2: '↓', 3: '↘', 4: '←', 5: '・', 6: '→', 7: '↖', 8: '↑', 9: '↗',
-};
+import { ARROWS } from './arrows';
 
 export function createHistoryView(root: HTMLElement): (entries: readonly HistoryEntry[]) => void {
   const section = document.createElement('section');

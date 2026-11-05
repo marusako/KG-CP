@@ -1,7 +1,15 @@
 import { getLang, type Lang } from './lang';
+import type { MeterRun } from '../core/inputMeter';
 
 // 画面に出す文の表。ja と en のキーは、Messages の型で同じになるよう縛る。
 // 数字などが入る文は関数にする。表記（236K など）とボタン名（LP・HS など）は訳さない。
+
+/** 区間のまとめの文。言語によらず同じ形（例: 2 (3F) → 3 (1F) → 6 (2F) + P） */
+function runsText(runs: readonly MeterRun[]): string {
+  return runs
+    .map((r) => `${r.dir} (${r.frames}F)${r.pressed.map((b) => ` + ${b}`).join('')}`)
+    .join(' → ');
+}
 
 const ja = {
   // 共通
@@ -116,6 +124,10 @@ const ja = {
 
   // 入力履歴・計測
   historyTitle: '入力履歴',
+  meterTitle: 'フレームメーター',
+  meterFreeze: 'ボタンで止める',
+  meterLive: '流す',
+  meterRunsText: runsText,
   metricsLabel: ' 計測',
   metricsSteps: (p0: string, p1: string, p2: string, p3: string) =>
     `1回の描画で進んだフレーム数: 0 → ${p0} / 1 → ${p1} / 2 → ${p2} / 3以上 → ${p3}`,
@@ -277,6 +289,10 @@ const en: Messages = {
   unreadableSaved: (n) => `${n} saved recipe(s) could not be read (the data is kept, not deleted)`,
 
   historyTitle: 'Input history',
+  meterTitle: 'Frame meter',
+  meterFreeze: 'Stop at button',
+  meterLive: 'Live',
+  meterRunsText: runsText,
   metricsLabel: ' Metrics',
   metricsSteps: (p0, p1, p2, p3) => `Frames advanced per render: 0 → ${p0} / 1 → ${p1} / 2 → ${p2} / 3+ → ${p3}`,
   metricsInterval: (mean, hz) => `Render interval: avg ${mean} ms (${hz} Hz)`,

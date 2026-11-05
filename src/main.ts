@@ -30,6 +30,8 @@ import { DEFAULT_SETTINGS, parseSettings, serializeSettings, type Settings } fro
 import { createCommandPanel } from './ui/commandPanel';
 import { createComboPanel } from './ui/comboPanel';
 import { createHistoryView } from './ui/historyView';
+import { createInputMeterView } from './ui/inputMeterView';
+import { INITIAL_METER, setMeterMode, stepMeter, type MeterState } from './core/inputMeter';
 import { createKeyConfig } from './ui/keyconfig';
 import { createMetricsPanel } from './ui/metricsPanel';
 import { createGameBar, createScreens, type Screen } from './ui/screens';
@@ -145,6 +147,10 @@ gameBar.setGame(profile.id, character ? pick(character.name, getLang()) : undefi
 const tabBar = document.createElement('nav');
 tabBar.className = 'tabs';
 gameRoot.append(tabBar);
+const meterView = createInputMeterView(gameRoot, (mode) => {
+  meter = setMeterMode(meter, mode);
+  meterView.render(meter);
+});
 const renderHistory = createHistoryView(gameRoot);
 const practicePane = document.createElement('div');
 practicePane.className = 'tab-pane';
@@ -158,6 +164,8 @@ const keyConfig = createKeyConfig(gameRoot, profile, bindings, keyboard);
 
 type Tab = 'practice' | 'combo';
 let activeTab: Tab = 'practice';
+/** 入力のフレームメーター。モードは保存せず、開くたびに「ボタンで止める」 */
+let meter: MeterState = INITIAL_METER;
 const tabDefs: readonly (readonly [Tab, string, HTMLElement])[] = [
   ['practice', msg().tabPractice, practicePane],
   ['combo', msg().tabCombo, comboPane],
@@ -218,6 +226,8 @@ const screens = createScreens(app, {
       gate = gateEnterGame(gate, performance.now());
       // 前の練習の入力が残らないよう、履歴をニュートラルの 1 フレームにする
       history.splice(0, history.length, { dir: 5, buttons: [] });
+      meter = INITIAL_METER;
+      meterView.render(meter);
     }
   },
 });
@@ -374,6 +384,12 @@ function stepFrame(end: number): void {
     if (result) panel.showResult(result);
   }
   frame++;
+  // 練習画面の外では、見えないメーターを進めない（入ると空に戻すので、外の入力は残らない）
+  const nextMeter = screens.current() === 'game' ? stepMeter(meter, history) : meter;
+  if (nextMeter !== meter) {
+    meter = nextMeter;
+    meterView.render(meter);
+  }
   renderHistory(compressHistory(history, HISTORY_ROWS));
 }
 
