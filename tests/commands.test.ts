@@ -46,10 +46,14 @@ describe('SF6_COMMANDS (受け入れ条件 2)', () => {
       expect([...c.buttons]).toEqual(c.id === '[2]8K' ? K : P);
     }
     const w = (id: string) => byId(SF6_COMMANDS, id);
-    expect(w('236P')).toMatchObject({ motionWindow: 15, buttonWindow: 6 });
-    expect(w('41236P')).toMatchObject({ motionWindow: 25, buttonWindow: 6 });
-    expect(w('63214P')).toMatchObject({ motionWindow: 25, buttonWindow: 6 });
+    // ボタン猶予はスト6 公開資料の値（第5段階③）。236・214・41236・63214 は 8、623・溜め技は 6
+    expect(w('236P')).toMatchObject({ motionWindow: 15, buttonWindow: 8 });
+    expect(w('214P')).toMatchObject({ motionWindow: 15, buttonWindow: 8 });
+    expect(w('623P')).toMatchObject({ motionWindow: 15, buttonWindow: 6 });
+    expect(w('41236P')).toMatchObject({ motionWindow: 25, buttonWindow: 8 });
+    expect(w('63214P')).toMatchObject({ motionWindow: 25, buttonWindow: 8 });
     expect(w('[4]6P')).toMatchObject({ motionWindow: 15, buttonWindow: 6 });
+    expect(w('[2]8K')).toMatchObject({ motionWindow: 15, buttonWindow: 6 });
     expect(w('360P')).toMatchObject({ motionWindow: 40 });
     const c46 = w('[4]6P');
     const c28 = w('[2]8K');
@@ -107,25 +111,14 @@ describe('GG_COMMANDS (受け入れ条件 2)', () => {
     expect(c.steps[1]!.minHold).toBeUndefined();
   });
 
-  it('猶予は SF6 の共通の値と同じ', () => {
-    const short = byId(SF6_COMMANDS, '236P');
-    const long = byId(SF6_COMMANDS, '41236P');
-    const rot = byId(SF6_COMMANDS, '360P');
-    if (short.kind !== 'motion' || long.kind !== 'motion') throw new Error('motion ではありません');
+  it('猶予は共通の値のまま（ボタン 6、モーション 15・25、360 は 40）。スト6 の値が変わっても動かない', () => {
     for (const id of ['gg-236', 'gg-214', 'gg-623', 'gg-[4]6']) {
-      expect(byId(GG_COMMANDS, id)).toMatchObject({
-        motionWindow: short.motionWindow,
-        buttonWindow: short.buttonWindow,
-      });
+      expect(byId(GG_COMMANDS, id)).toMatchObject({ motionWindow: 15, buttonWindow: 6 });
     }
     for (const id of ['gg-41236', 'gg-63214', 'gg-632146', 'gg-236236', 'gg-214214']) {
-      expect(byId(GG_COMMANDS, id)).toMatchObject({
-        motionWindow: long.motionWindow,
-        buttonWindow: long.buttonWindow,
-      });
+      expect(byId(GG_COMMANDS, id)).toMatchObject({ motionWindow: 25, buttonWindow: 6 });
     }
     expect(byId(GG_COMMANDS, 'gg-360')).toMatchObject({ motionWindow: 40 });
-    expect(rot).toMatchObject({ motionWindow: 40 });
   });
 
   it('id が重複しない', () => {

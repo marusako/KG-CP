@@ -278,7 +278,7 @@ export function createGameBar(root: HTMLElement, onBack: () => void): GameBar {
     el: bar,
     setGame: (id) => {
       name.textContent = findGame(id)?.name ?? '';
-      note.textContent = id === 'sf6' ? '' : '猶予は共通の値です';
+      note.textContent = id === 'sf6' ? '一部の猶予は公開資料の値です（2024年5月時点）' : '猶予は共通の値です';
     },
   };
 }

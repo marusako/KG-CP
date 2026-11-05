@@ -33,6 +33,11 @@ describe('PROFILES (受け入れ条件 3)', () => {
     expect(p.samples).toEqual(GG_SAMPLES);
   });
 
+  it('先行入力 inputBuffer は sf6・ggst とも 4（第5段階③ 受け入れ条件 2）', () => {
+    expect(PROFILES.sf6.inputBuffer).toBe(4);
+    expect(PROFILES.ggst.inputBuffer).toBe(4);
+  });
+
   for (const id of ['sf6', 'ggst'] as const) {
     describe(`${id} の初期値`, () => {
       const p = PROFILES[id];

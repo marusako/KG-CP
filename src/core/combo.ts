@@ -91,22 +91,27 @@ export function isAttemptInProgress(state: TrialState): boolean {
   return state.stepIndex > 0;
 }
 
-/** 1フレーム進める。frame はいまの通算フレーム番号。history の最後がいまのフレーム。 */
+/**
+ * 1フレーム進める。frame はいまの通算フレーム番号。history の最後がいまのフレーム。
+ * inputBuffer は先行入力。窓が開く inputBuffer フレーム前までの早押しは成功にし、
+ * 次の手の基準は技が実際に出るフレームにする
+ */
 export function stepTrial(
   state: TrialState,
   recipe: ComboRecipe,
   history: readonly FrameInput[],
   frame: number,
+  inputBuffer = 0,
 ): { state: TrialState; event: TrialEvent | null } {
   const step = recipe.steps[state.stepIndex];
   if (!step) return { state: initialTrialState(), event: null };
   const isLast = state.stepIndex === recipe.steps.length - 1;
   const matched = matchesStep(history, step.input);
-  const advance = (offset: number | null): { state: TrialState; event: TrialEvent } =>
+  const advance = (offset: number | null, baseFrame = frame): { state: TrialState; event: TrialEvent } =>
     isLast
       ? { state: initialTrialState(), event: { type: 'complete', stepIndex: state.stepIndex, offset } }
       : {
-          state: { stepIndex: state.stepIndex + 1, lastPressFrame: frame },
+          state: { stepIndex: state.stepIndex + 1, lastPressFrame: baseFrame },
           event: { type: 'hit', stepIndex: state.stepIndex, offset },
         };
 
@@ -119,7 +124,11 @@ export function stepTrial(
     state: initialTrialState(),
     event: { type: 'drop', stepIndex: state.stepIndex, reason, offset } as const,
   });
-  if (matched) return offset < step.window.min ? drop('early') : advance(offset);
+  if (matched) {
+    if (offset >= step.window.min) return advance(offset);
+    if (offset < step.window.min - inputBuffer) return drop('early');
+    return advance(offset, frame + (step.window.min - offset));
+  }
   const cur = history[history.length - 1];
   if (cur !== undefined && justPressedAny(history, cur.buttons)) return drop('wrong');
   if (offset > step.window.max) return drop('late');

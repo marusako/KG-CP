@@ -430,3 +430,112 @@ describe('isAttemptInProgress (受け入れ条件 2)', () => {
     expect(isAttemptInProgress(out.state)).toBe(false);
   });
 });
+
+describe('stepTrial: 先行入力 (第5段階③ 受け入れ条件 3〜6)', () => {
+  const BUF = 4;
+  const r2 = recipe(['2LP'], ['2LP', [10, 14]]);
+  const r3 = recipe(['2LP'], ['2LP', [10, 14]], ['2LP', [0, 10]]);
+
+  /** inputBuffer を渡して 1 フレームずつ流す（run は 4 引数のまま使うため別に持つ） */
+  function runBuf(
+    r: ComboRecipe,
+    inputs: readonly FrameInput[],
+    inputBuffer: number | undefined,
+    startFrame = 0,
+  ) {
+    let state = initialTrialState();
+    const events: (TrialEvent | null)[] = [];
+    const states: TrialState[] = [];
+    inputs.forEach((_, i) => {
+      const hist = inputs.slice(0, i + 1);
+      const res =
+        inputBuffer === undefined
+          ? stepTrial(state, r, hist, startFrame + i)
+          : stepTrial(state, r, hist, startFrame + i, inputBuffer);
+      state = res.state;
+      events.push(res.event);
+      states.push(res.state);
+    });
+    return { events, states, state };
+  }
+
+  it('窓 [10,14]・先行 4: 6〜9F 目に押すと成功。最後の手なので complete で、offset は押した値', () => {
+    for (const at of [6, 7, 8, 9]) {
+      const out = runBuf(r2, timeline(at + 1, { 0: f(2, 'LP'), [at]: f(2, 'LP') }), BUF);
+      expect(out.events[at]).toEqual({ type: 'complete', stepIndex: 1, offset: at });
+      expect(out.state).toEqual(initialTrialState());
+    }
+  });
+
+  it('5F 目に押すと drop(early)、offset は 5', () => {
+    const out = runBuf(r2, timeline(6, { 0: f(2, 'LP'), 5: f(2, 'LP') }), BUF);
+    expect(out.events[5]).toEqual({ type: 'drop', stepIndex: 1, reason: 'early', offset: 5 });
+    expect(out.state).toEqual(initialTrialState());
+  });
+
+  it('10F・14F 目はいまと同じ成功。15F 目になると late', () => {
+    const at10 = runBuf(r2, timeline(11, { 0: f(2, 'LP'), 10: f(2, 'LP') }), BUF);
+    expect(at10.events[10]).toEqual({ type: 'complete', stepIndex: 1, offset: 10 });
+    const at14 = runBuf(r2, timeline(15, { 0: f(2, 'LP'), 14: f(2, 'LP') }), BUF);
+    expect(at14.events[14]).toEqual({ type: 'complete', stepIndex: 1, offset: 14 });
+    const late = runBuf(r2, timeline(16, { 0: f(2, 'LP') }), BUF);
+    expect(late.events[14]).toBeNull();
+    expect(late.events[15]).toEqual({ type: 'drop', stepIndex: 1, reason: 'late', offset: 15 });
+  });
+
+  it('違うボタンの押下は、先行の範囲でも wrong のまま', () => {
+    const out = runBuf(r2, timeline(9, { 0: f(2, 'LP'), 8: f(2, 'MP') }), BUF);
+    expect(out.events[8]).toEqual({ type: 'drop', stepIndex: 1, reason: 'wrong', offset: 8 });
+  });
+
+  it('途中の手が先行で成功すると hit。次の手の基準は「前の基準＋min」(100+10=110)', () => {
+    const out = runBuf(r3, timeline(9, { 0: f(2, 'LP'), 8: f(2, 'LP') }), BUF, 100);
+    expect(out.events[8]).toEqual({ type: 'hit', stepIndex: 1, offset: 8 });
+    expect(out.state).toEqual({ stepIndex: 2, lastPressFrame: 110 });
+  });
+
+  it('先行成功のあと、3 手目の offset は 110F から数える（117F に押すと 7）', () => {
+    const inputs = timeline(18, { 0: f(2, 'LP'), 8: f(2, 'LP'), 17: f(2, 'LP') });
+    const out = runBuf(r3, inputs, BUF, 100);
+    expect(out.events[8]).toEqual({ type: 'hit', stepIndex: 1, offset: 8 });
+    // 108F〜116F は基準(110F)の前後で何も押していないので何も起きない
+    expect(out.events.slice(9, 17).every((e) => e === null)).toBe(true);
+    expect(out.events[17]).toEqual({ type: 'complete', stepIndex: 2, offset: 7 });
+  });
+
+  it('先行を使わない（窓内で押した）ときの次の手の基準は、押したフレームのまま', () => {
+    const out = runBuf(r3, timeline(11, { 0: f(2, 'LP'), 10: f(2, 'LP') }), BUF, 100);
+    expect(out.events[10]).toEqual({ type: 'hit', stepIndex: 1, offset: 10 });
+    expect(out.state).toEqual({ stepIndex: 2, lastPressFrame: 110 });
+    const out2 = runBuf(r3, timeline(13, { 0: f(2, 'LP'), 12: f(2, 'LP') }), BUF, 100);
+    expect(out2.state).toEqual({ stepIndex: 2, lastPressFrame: 112 });
+  });
+
+  it('inputBuffer を省略すると、先行なし（0）と同じ。9F 目は early', () => {
+    const inputs = timeline(10, { 0: f(2, 'LP'), 9: f(2, 'LP') });
+    const omitted = runBuf(r2, inputs, undefined);
+    expect(omitted.events[9]).toEqual({ type: 'drop', stepIndex: 1, reason: 'early', offset: 9 });
+    expect(runBuf(r2, inputs, 0).events).toEqual(omitted.events);
+  });
+
+  it('inputBuffer を省略しても、10F 目は成功（今までどおり）', () => {
+    const out = runBuf(r2, timeline(11, { 0: f(2, 'LP'), 10: f(2, 'LP') }), undefined);
+    expect(out.events[10]).toEqual({ type: 'complete', stepIndex: 1, offset: 10 });
+  });
+});
+
+describe('describeDrop (第5段階③ 受け入れ条件 7)', () => {
+  const r2 = recipe(['2LP'], ['2LP', [10, 14]]);
+  const early = { type: 'drop', stepIndex: 1, reason: 'early', offset: 3 } as const;
+
+  it('inputBuffer を渡すと「成功になる範囲まであと何F遅く」を返す（窓 10・先行 4・3F 目 → あと 3F）', async () => {
+    const { describeDrop } = await import('../src/ui/comboPanel');
+    expect(describeDrop(early, r2, 4)).toContain('早い（あと 3F 遅く）');
+  });
+
+  it('inputBuffer を渡さないと、先行なしの文（窓 10・3F 目 → あと 7F）', async () => {
+    const { describeDrop } = await import('../src/ui/comboPanel');
+    expect(describeDrop(early, r2)).toContain('早い（あと 7F 遅く）');
+    expect(describeDrop(early, r2, 0)).toBe(describeDrop(early, r2));
+  });
+});

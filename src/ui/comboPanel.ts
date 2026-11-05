@@ -4,11 +4,15 @@ import type { GameProfile } from '../core/profiles';
 import { readFirst, recipesKeys } from '../core/storageKeys';
 import type { FrameInput } from '../core/types';
 
-export function describeDrop(e: Extract<TrialEvent, { type: 'drop' }>, recipe: ComboRecipe): string {
+export function describeDrop(
+  e: Extract<TrialEvent, { type: 'drop' }>,
+  recipe: ComboRecipe,
+  inputBuffer = 0,
+): string {
   switch (e.reason) {
     case 'early': {
       const w = recipe.steps[e.stepIndex]?.window;
-      return `早い（あと ${(w?.min ?? 0) - e.offset}F 遅く）`;
+      return `早い（あと ${(w?.min ?? 0) - inputBuffer - e.offset}F 遅く）`;
     }
     case 'late': {
       const w = recipe.steps[e.stepIndex]?.window;
@@ -17,6 +21,17 @@ export function describeDrop(e: Extract<TrialEvent, { type: 'drop' }>, recipe: C
     case 'wrong':
       return '違う入力';
   }
+}
+
+/**
+ * 成功した手の下に出す文。offset は前の手の基準からのフレーム数（最初の手は null）。
+ * 窓より早い成功（先行入力）は、何 F 早かったかも出す。前の手が先行入力だと offset はマイナスになりうる
+ */
+export function describeHit(offset: number | null, window: { min: number; max: number } | null): string {
+  if (offset === null) return 'OK';
+  const shown = `${offset >= 0 ? '+' : ''}${offset}F`;
+  const min = window?.min ?? 0;
+  return offset < min ? `${shown}（先行 ${min - offset}F）` : shown;
 }
 
 function toJson(r: ComboRecipe): string {
@@ -137,7 +152,7 @@ export function createComboPanel(
         name.textContent = s.text;
         const sub = document.createElement('div');
         sub.className = 'note';
-        if (mark?.kind === 'hit') sub.textContent = mark.offset === null ? 'OK' : `+${mark.offset}F`;
+        if (mark?.kind === 'hit') sub.textContent = describeHit(mark.offset, s.window);
         else if (mark?.kind === 'drop') sub.textContent = mark.text;
         else sub.textContent = s.window ? `${s.window.min}〜${s.window.max}F` : '開始';
         box.append(name, sub);
@@ -253,7 +268,7 @@ export function createComboPanel(
       result.textContent = reason;
     },
     step: (history, frame) => {
-      const out = stepTrial(state, current, history, frame);
+      const out = stepTrial(state, current, history, frame, profile.inputBuffer);
       const prev = state;
       state = out.state;
       const e = out.event;
@@ -274,7 +289,7 @@ export function createComboPanel(
           result.textContent = `${e.stepIndex + 1}手目 成功`;
         }
       } else {
-        const text = describeDrop(e, current);
+        const text = describeDrop(e, current, profile.inputBuffer);
         marks[e.stepIndex] = { kind: 'drop', text };
         result.className = 'result ng';
         result.textContent = `${e.stepIndex + 1}手目 失敗: ${text}`;
