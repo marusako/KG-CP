@@ -418,8 +418,10 @@ describe('moveDisplayName: 技名を選んだ言語で出す（ユーザーの�
     expect(moveDisplayName(mv(cData, '236236K'), cammy, PROFILES.sf6, 'ja')).toBe('スピンドライブスマッシャー (236236K)');
   });
 
-  it('日本語名のない技は、日本語でも英語名', () => {
-    expect(moveDisplayName(mv(bData, '236HS'), bridget, PROFILES.ggst, 'ja')).toBe('Stop and Dash (Hit on Send) (236HS)');
-    expect(moveDisplayName(mv(bData, '63214P'), bridget, PROFILES.ggst, 'ja')).toBe('Rock the Baby (63214P)');
+  it('ブリジットの必殺技も、日本語では日本語名、英語では英語名', () => {
+    expect(moveDisplayName(mv(bData, '236HS'), bridget, PROFILES.ggst, 'ja')).toBe('ストップ＆ダッシュ（236版） (236HS)');
+    expect(moveDisplayName(mv(bData, '63214P'), bridget, PROFILES.ggst, 'ja')).toBe('ロック ザ ベイビー (63214P)');
+    expect(moveDisplayName(mv(bData, '236K'), bridget, PROFILES.ggst, 'ja')).toBe('キックスタート マイ ハート (236K)');
+    expect(moveDisplayName(mv(bData, '236K'), bridget, PROFILES.ggst, 'en')).toBe('Kick Start My Heart (236K)');
   });
 });

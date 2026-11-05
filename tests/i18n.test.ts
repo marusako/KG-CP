@@ -247,7 +247,7 @@ describe('第7段階 レビューの提案 1・3（英語の言い回し、名�
     const move = bridget?.moves.find((m) => m.id === 'bridget-stop-and-dash-send');
     if (!move) throw new Error('技がありません');
     expect(moveToCommand(move, PROFILES.ggst, 'en')?.name).toBe('Stop and Dash (Hit on Send) (236S/236HS)');
-    expect(moveToCommand(move, PROFILES.ggst, 'ja')?.name).toBe('Stop and Dash (Hit on Send) (236S・236HS)');
+    expect(moveToCommand(move, PROFILES.ggst, 'ja')?.name).toBe('ストップ＆ダッシュ（236版） (236S・236HS)');
   });
 
   it('サンプル 1 の名前: 手は 2LP なので、日本語は「小パン」、英語は「2LP x2」', async () => {

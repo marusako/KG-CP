@@ -235,8 +235,10 @@ export const GG_COMMANDS: CommandDef[] = [
   // 236236・214214 は、手の形が Dustloop（2-6-2-6）と違うので、共通の値のまま
   ggMotion('236236', plus('236236'), [step(2), step(3), step(6), step(2), step(3), step(6)], LONG_MOTION_WINDOW),
   ggMotion('214214', plus('214214'), [step(2), step(1), step(4), step(2), step(1), step(4)], LONG_MOTION_WINDOW),
-  // [4]6 は 30i-10-9e。30i を「溜め 30F 以上」と読むのは推測。溜めは Dustloop の 30F を使う（まとめの表には「4（25F）」ともあり、食い違う）
-  ggStepMotion('[4]6', () => msg().chargePlusButton('[4]6'), [{ dirs: [1, 4, 7], minHold: 30 }, step(6)], [10], 9),
+  // [4]6 は 30i-10-9e（手の間 10・ボタンまで 9 はここから）。溜めは 25F:
+  // wikiwiki「初心者ガイド/コマンド入力」（2026-04-09 更新）に「Ver.2.0 にてタメ時間が 30F→25F に短縮」とあり、
+  // 有志のまとめ（Notion）の「4（25F）」とも合う。Dustloop の 30i は Ver.2.0 より前の値と考えられる（推測）。確認日 2026-11-05
+  ggStepMotion('[4]6', () => msg().chargePlusButton('[4]6'), [{ dirs: [1, 4, 7], minHold: 25 }, step(6)], [10], 9),
   // 360 は Dustloop の i-30e の読み方が分からないので、共通の値のまま
   named(
     {

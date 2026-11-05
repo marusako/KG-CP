@@ -52,17 +52,17 @@ const CAMMY_MOVES: MoveRow[] = [
   ['cammy-sa2', { en: 'Killer Bee Spin', ja: 'キラービースピン' }, ['214214P'], 'super'],
   ['cammy-sa3', { en: 'Delta Red Assault', ja: 'デルタレッドアサルト' }, ['236236P'], 'super'],
 ];
-// ブリジットの日本語名は確かめられた出典がないので ja なし（英語名を出す）
+// ブリジットの日本語名は wikiwiki の「ブリジット/コマンド技」（2026-10-01 更新）。ストップ＆ダッシュは wiki の呼び方（236版・214版）で分ける
 const BRIDGET_MOVES: MoveRow[] = [
-  ['bridget-kick-start', { en: 'Kick Start My Heart' }, ['236K'], 'special'],
-  ['bridget-roger-dive', { en: 'Roger Dive' }, ['236K'], 'special'],
-  ['bridget-stop-and-dash-send', { en: 'Stop and Dash (Hit on Send)' }, ['236S', '236HS'], 'special'],
-  ['bridget-stop-and-dash-return', { en: 'Stop and Dash (Hit on Return)' }, ['214S', '214HS'], 'special'],
-  ['bridget-rolling-movement', { en: 'Rolling Movement' }, ['214K'], 'special'],
-  ['bridget-starship', { en: 'Starship' }, ['623P'], 'special'],
-  ['bridget-rock-the-baby', { en: 'Rock the Baby' }, ['63214P'], 'special'],
-  ['bridget-loop-the-loop', { en: 'Loop the Loop' }, ['632146S'], 'super'],
-  ['bridget-killing-machine', { en: 'Return of the Killing Machine' }, ['632146HS'], 'super'],
+  ['bridget-kick-start', { en: 'Kick Start My Heart', ja: 'キックスタート マイ ハート' }, ['236K'], 'special'],
+  ['bridget-roger-dive', { en: 'Roger Dive', ja: 'ロジャーダイブ' }, ['236K'], 'special'],
+  ['bridget-stop-and-dash-send', { en: 'Stop and Dash (Hit on Send)', ja: 'ストップ＆ダッシュ（236版）' }, ['236S', '236HS'], 'special'],
+  ['bridget-stop-and-dash-return', { en: 'Stop and Dash (Hit on Return)', ja: 'ストップ＆ダッシュ（214版）' }, ['214S', '214HS'], 'special'],
+  ['bridget-rolling-movement', { en: 'Rolling Movement', ja: 'ローリング移動' }, ['214K'], 'special'],
+  ['bridget-starship', { en: 'Starship', ja: 'スターシップ' }, ['623P'], 'special'],
+  ['bridget-rock-the-baby', { en: 'Rock the Baby', ja: 'ロック ザ ベイビー' }, ['63214P'], 'special'],
+  ['bridget-loop-the-loop', { en: 'Loop the Loop', ja: 'ループ ザ ループ' }, ['632146S'], 'super'],
+  ['bridget-killing-machine', { en: 'Return of the Killing Machine', ja: '帰ってきたキルマシーン' }, ['632146HS'], 'super'],
 ];
 
 type Join = 'link' | 'cancel' | undefined;
@@ -143,8 +143,8 @@ describe('CHARACTERS (第6段階 受け入れ条件 2)', () => {
     expect(move(character('cammy'), 'cammy-sa2').name.en).toBe('Killer Bee Spin');
   });
 
-  it('ブリジットの技名には ja がない', () => {
-    for (const m of character('bridget').moves) expect(m.name.ja, m.id).toBeUndefined();
+  it('ブリジットの技名は全部 ja がある（wikiwiki で確かめた日本語名）', () => {
+    for (const m of character('bridget').moves) expect(m.name.ja, m.id).toBeTruthy();
   });
 
   it('キャミィの技名は全部 ja がある', () => {
@@ -191,7 +191,8 @@ describe('moveToCommand (第6段階 受け入れ条件 3)', () => {
     expect([...c.buttons]).toEqual(['S', 'HS']);
     expect(shapeOf(c)).toEqual(shapeOf(readCommand(b, '236S')));
     expect(c.id).toBe('bridget-stop-and-dash-send');
-    expect(c.name).toBe('Stop and Dash (Hit on Send) (236S・236HS)');
+    // 初めの言語は ja なので日本語名（ブリジットの日本語名は第10段階のあとに足した）
+    expect(c.name).toBe('ストップ＆ダッシュ（236版） (236S・236HS)');
   });
 
   it('入力が 1 つなら名前は「スパイラルアロー (236K)」（初めの言語は ja）、id は技の id', () => {
@@ -208,10 +209,10 @@ describe('moveToCommand (第6段階 受け入れ条件 3)', () => {
     expect(moveToCommand(m, rulesOf(c), 'ja')?.name).toBe('スパイラルアロー (236K)');
   });
 
-  it('ブリジットは ja でも英語名: Kick Start My Heart (236K)', () => {
+  it('ブリジットは ja では日本語名、en では英語名: キックスタート マイ ハート / Kick Start My Heart (236K)', () => {
     const b = character('bridget');
     const m = move(b, 'bridget-kick-start');
-    expect(moveToCommand(m, rulesOf(b), 'ja')?.name).toBe('Kick Start My Heart (236K)');
+    expect(moveToCommand(m, rulesOf(b), 'ja')?.name).toBe('キックスタート マイ ハート (236K)');
     expect(moveToCommand(m, rulesOf(b), 'en')?.name).toBe('Kick Start My Heart (236K)');
   });
 

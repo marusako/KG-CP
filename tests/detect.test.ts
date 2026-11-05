@@ -661,7 +661,7 @@ describe('analyzeAttempt: 将来の定義への守り (第8段階 レビュー�
   });
 });
 
-describe('analyzeAttempt: 本物の gg-[4]6（溜め [1,4,7] を 30F、手の間 10、ボタンまで 9）(第8段階 レビューの提案 2)', () => {
+describe('analyzeAttempt: 本物の gg-[4]6（溜め [1,4,7] を 25F、手の間 10、ボタンまで 9）(第8段階 レビューの提案 2。溜めは Ver.2.0 の 25F に直した)', () => {
   const charge = async (): Promise<CommandDef> => {
     const { GG_COMMANDS } = await import('../src/core/commands');
     const c = GG_COMMANDS.find((x) => x.id === 'gg-[4]6');
@@ -670,24 +670,24 @@ describe('analyzeAttempt: 本物の gg-[4]6（溜め [1,4,7] を 30F、手の間
   };
   const P = ['P'];
 
-  it('1 と 4 をまたいで 30F 溜めれば成功（溜めの方向は 1・4・7）', async () => {
-    expect(analyzeAttempt(frames(...rep(1, 15), ...rep(4, 15), [6, P]), await charge())).toMatchObject({ ok: true });
+  it('1 と 4 をまたいで 25F 溜めれば成功（溜めの方向は 1・4・7）', async () => {
+    expect(analyzeAttempt(frames(...rep(1, 12), ...rep(4, 13), [6, P]), await charge())).toMatchObject({ ok: true });
   });
 
-  it('29F では charge-short', async () => {
-    expect(analyzeAttempt(frames(...rep(4, 29), [6, P]), await charge())).toMatchObject({
+  it('24F では charge-short', async () => {
+    expect(analyzeAttempt(frames(...rep(4, 24), [6, P]), await charge())).toMatchObject({
       ok: false,
       reason: 'charge-short',
     });
   });
 
-  it('30F 溜めて離し、4 を 1F 入れ直してから 6 でも成功（溜め終わりから 6 まで 10F 以内）', async () => {
-    const h = frames(...rep(4, 30), 5, 4, ...rep(5, 5), [6, P]);
+  it('25F 溜めて離し、4 を 1F 入れ直してから 6 でも成功（溜め終わりから 6 まで 10F 以内）', async () => {
+    const h = frames(...rep(4, 25), 5, 4, ...rep(5, 5), [6, P]);
     expect(analyzeAttempt(h, await charge())).toMatchObject({ ok: true });
   });
 
-  it('30F 溜めても、溜め終わりから 6 まで 11F なら失敗（文は今までどおり charge-short）', async () => {
-    const h = frames(...rep(4, 30), ...rep(5, 9), 4, [6, P]);
+  it('25F 溜めても、溜め終わりから 6 まで 11F なら失敗（文は今までどおり charge-short）', async () => {
+    const h = frames(...rep(4, 25), ...rep(5, 9), 4, [6, P]);
     expect(analyzeAttempt(h, await charge())).toMatchObject({ ok: false, reason: 'charge-short' });
   });
 });

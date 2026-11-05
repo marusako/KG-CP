@@ -110,8 +110,10 @@ const CAMMY: CharacterData = {
 // 日本語名は、確かめられる出典が見つからなかった（公式サイトのコマンド表は画像で読み取れなかった）ので ja を付けない。
 // ja がないときは、日本語でも英語名を出す。ゲーム内のコマンド表などで確かめた名前を、あとで足す。
 // 出典: dashfight の技表。Starship の入力は gamezo の記事（623P）。
-// Rock the Baby の入力は出典が食い違う。dashfight（1 か所のみ）は 632146P、FAT（2026-06 更新）は 63214P。
-// FAT のほうが新しく、ほかの技の入力とも合っているので 63214P にした。
+// 日本語名: wikiwiki「ブリジット/コマンド技」（https://wikiwiki.jp/ggst-memo/ 、2026-10-01 更新、確認日 2026-11-05）。
+// ストップ＆ダッシュは、同じ wiki の呼び方（236版・214版）で 2 つに分ける。
+// Rock the Baby の入力は出典が食い違う。dashfight（1 か所のみ）は 632146P、FAT（2026-06 更新）と wikiwiki は 63214P。
+// 2 か所が合っているので 63214P にした。
 const BRIDGET: CharacterData = {
   id: 'bridget',
   game: 'ggst',
@@ -119,37 +121,52 @@ const BRIDGET: CharacterData = {
   moves: [
     {
       id: 'bridget-kick-start',
-      name: { en: 'Kick Start My Heart' },
+      name: { en: 'Kick Start My Heart', ja: 'キックスタート マイ ハート' },
       inputs: ['236K'],
       kind: 'special',
-      note: { ja: '派生の Shoot（K）・Brake（P）は練習の対象外です', en: 'The follow-ups Shoot (K) and Brake (P) are not part of the practice' },
+      note: { ja: '派生の 発射（K）・停止（P）は練習の対象外です', en: 'The follow-ups Shoot (K) and Brake (P) are not part of the practice' },
     },
     {
       id: 'bridget-roger-dive',
-      name: { en: 'Roger Dive' },
+      name: { en: 'Roger Dive', ja: 'ロジャーダイブ' },
       inputs: ['236K'],
       kind: 'special',
       note: { ja: '空中で出す技。アプリでは地上と同じに判定します', en: 'Performed in the air. The app judges it the same as on the ground' },
     },
-    { id: 'bridget-stop-and-dash-send', name: { en: 'Stop and Dash (Hit on Send)' }, inputs: ['236S', '236HS'], kind: 'special' },
-    { id: 'bridget-stop-and-dash-return', name: { en: 'Stop and Dash (Hit on Return)' }, inputs: ['214S', '214HS'], kind: 'special' },
+    {
+      id: 'bridget-stop-and-dash-send',
+      name: { en: 'Stop and Dash (Hit on Send)', ja: 'ストップ＆ダッシュ（236版）' },
+      inputs: ['236S', '236HS'],
+      kind: 'special',
+    },
+    {
+      id: 'bridget-stop-and-dash-return',
+      name: { en: 'Stop and Dash (Hit on Return)', ja: 'ストップ＆ダッシュ（214版）' },
+      inputs: ['214S', '214HS'],
+      kind: 'special',
+    },
     {
       id: 'bridget-rolling-movement',
-      name: { en: 'Rolling Movement' },
+      name: { en: 'Rolling Movement', ja: 'ローリング移動' },
       inputs: ['214K'],
       kind: 'special',
       note: { ja: 'ヨーヨーを出しているときだけ出ます', en: 'Only usable while the yo-yo is out' },
     },
-    { id: 'bridget-starship', name: { en: 'Starship' }, inputs: ['623P'], kind: 'special' },
+    { id: 'bridget-starship', name: { en: 'Starship', ja: 'スターシップ' }, inputs: ['623P'], kind: 'special' },
     {
       id: 'bridget-rock-the-baby',
-      name: { en: 'Rock the Baby' },
+      name: { en: 'Rock the Baby', ja: 'ロック ザ ベイビー' },
       inputs: ['63214P'],
       kind: 'special',
       note: { ja: '空中でも出せます', en: 'Can also be performed in the air' },
     },
-    { id: 'bridget-loop-the-loop', name: { en: 'Loop the Loop' }, inputs: ['632146S'], kind: 'super' },
-    { id: 'bridget-killing-machine', name: { en: 'Return of the Killing Machine' }, inputs: ['632146HS'], kind: 'super' },
+    { id: 'bridget-loop-the-loop', name: { en: 'Loop the Loop', ja: 'ループ ザ ループ' }, inputs: ['632146S'], kind: 'super' },
+    {
+      id: 'bridget-killing-machine',
+      name: { en: 'Return of the Killing Machine', ja: '帰ってきたキルマシーン' },
+      inputs: ['632146HS'],
+      kind: 'super',
+    },
   ],
   combos: [
     {

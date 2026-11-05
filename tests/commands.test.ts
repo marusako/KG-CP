@@ -105,10 +105,10 @@ describe('GG_COMMANDS (受け入れ条件 2)', () => {
     expect([...c.buttons]).toEqual(GG_BUTTONS);
   });
 
-  it('溜めは [1,4,7] を 30F 溜めて 6（Dustloop の 30i）', () => {
+  it('溜めは [1,4,7] を 25F 溜めて 6（Ver.2.0 で 30F→25F。wikiwiki・有志のまとめ）', () => {
     const c = byId(GG_COMMANDS, 'gg-[4]6');
     if (c.kind !== 'motion') throw new Error('motion ではありません');
-    expect(c.steps[0]!.minHold).toBe(30);
+    expect(c.steps[0]!.minHold).toBe(25);
     expect(c.steps[1]!.minHold).toBeUndefined();
   });
 
