@@ -2,6 +2,7 @@ import { msg } from '../i18n/messages';
 import { createSearchInput } from './searchInput';
 import { filterItems } from '../core/search';
 import type { AttemptResult, CommandDef } from '../core/types';
+import type { PanelRoots } from './panelRoots';
 
 const RECENT_ATTEMPTS = 20;
 
@@ -37,17 +38,25 @@ export interface CommandPanel {
   readonly setCommands: (commands: readonly CommandDef[], notes?: ReadonlyMap<string, string>) => void;
 }
 
+/** 選ぶ一覧（検索欄と技の一覧）を roots.select に、判定の結果（選んでいる技の名前・注記・判定の文・成功率）を roots.status に置く */
 export function createCommandPanel(
-  root: HTMLElement,
+  roots: PanelRoots,
   commands: readonly CommandDef[],
   initialNotes: ReadonlyMap<string, string> = new Map(),
 ): CommandPanel {
   const section = document.createElement('section');
+  section.className = 'select-panel';
   const title = document.createElement('h2');
   title.textContent = msg().practiceTitle;
   const search = createSearchInput(msg().practiceSearchPlaceholder);
   const list = document.createElement('div');
   list.className = 'command-list';
+  section.append(title, search, list);
+  roots.select.append(section);
+
+  const status = document.createElement('section');
+  status.className = 'status-panel';
+  const currentName = document.createElement('h2');
   const moveNote = document.createElement('div');
   moveNote.className = 'note';
   const result = document.createElement('div');
@@ -55,8 +64,8 @@ export function createCommandPanel(
   result.textContent = msg().practiceIdle;
   const rate = document.createElement('div');
   rate.className = 'note';
-  section.append(title, search, list, moveNote, result, rate);
-  root.append(section);
+  status.append(currentName, moveNote, result, rate);
+  roots.status.append(status);
 
   let all = commands;
   let notes = initialNotes;
@@ -71,7 +80,9 @@ export function createCommandPanel(
         : msg().recentRate(Math.round((ok / recent.length) * 100), ok, recent.length);
   };
 
+  /** 状態表示の見出し（選んでいる技の名前）と注記 */
   const updateNote = () => {
+    currentName.textContent = current.name;
     moveNote.textContent = notes.get(current.id) ?? '';
   };
 

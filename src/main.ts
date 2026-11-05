@@ -155,41 +155,88 @@ function isSearchFocused(): boolean {
   return document.activeElement instanceof HTMLElement && document.activeElement.classList.contains('search-input');
 }
 
-/** 練習画面（game のときだけ見せる）。レイアウトに影響しないよう display: contents で包む */
+/**
+ * 練習画面（game のときだけ見せる）。上から、画面操作のバー・3 つの枠（入力履歴・状態表示・選択）・フレームメーター。
+ * キーコンフィグは、3 つの枠とメーターの上に重ねる層（ふだんは隠す）
+ */
 const gameRoot = document.createElement('div');
 gameRoot.className = 'game-root';
 app.append(gameRoot);
 
-const gameBar = createGameBar(
-  gameRoot,
-  () => {
+const gameBar = createGameBar(gameRoot, {
+  onCharSelect: () => {
     screens.show('charSelect');
   },
-  () => {
+  onBack: () => {
     screens.show('title');
   },
-);
+  onKeyConfig: () => {
+    setKeyConfigOpen(!keyConfigOpen);
+  },
+});
 gameBar.setGame(profile.id, character ? pick(character.name, getLang()) : undefined);
-const frameMeterView = createFrameMeterView(gameRoot);
-const tabBar = document.createElement('nav');
-tabBar.className = 'tabs';
-gameRoot.append(tabBar);
-const renderHistory = createHistoryView(gameRoot);
-const practicePane = document.createElement('div');
-practicePane.className = 'tab-pane';
-const comboPane = document.createElement('div');
-comboPane.className = 'tab-pane';
-gameRoot.append(practicePane, comboPane);
+
+const gameMain = document.createElement('div');
+gameMain.className = 'game-main';
+gameRoot.append(gameMain);
+const renderHistory = createHistoryView(gameMain);
+const statusColumn = document.createElement('div');
+statusColumn.className = 'game-column';
+const selectColumn = document.createElement('div');
+selectColumn.className = 'game-column';
+gameMain.append(statusColumn, selectColumn);
+/** タブごとに、状態表示の枠と選択の枠に 1 つずつ置く入れ物 */
+function tabPane(column: HTMLElement): HTMLElement {
+  const pane = document.createElement('div');
+  pane.className = 'tab-pane';
+  column.append(pane);
+  return pane;
+}
+const practiceRoots = { status: tabPane(statusColumn), select: tabPane(selectColumn) };
+const comboRoots = { status: tabPane(statusColumn), select: tabPane(selectColumn) };
 const initialPractice = practiceOf(profile, character);
-const panel = createCommandPanel(practicePane, initialPractice.commands, initialPractice.notes);
-const comboPanel = createComboPanel(comboPane, profile, character ?? undefined);
-const keyConfig = createKeyConfig(gameRoot, profile, bindings, keyboard);
+const panel = createCommandPanel(practiceRoots, initialPractice.commands, initialPractice.notes);
+const comboPanel = createComboPanel(comboRoots, profile, character ?? undefined);
+const frameMeterView = createFrameMeterView(gameRoot);
+
+const keyConfigLayer = document.createElement('div');
+keyConfigLayer.className = 'kc-layer';
+keyConfigLayer.hidden = true;
+const keyConfigDialog = document.createElement('div');
+keyConfigDialog.className = 'kc-dialog';
+const keyConfigClose = document.createElement('button');
+keyConfigClose.className = 'kc-close';
+keyConfigClose.textContent = msg().kcClose;
+keyConfigClose.addEventListener('click', () => {
+  keyConfigClose.blur();
+  setKeyConfigOpen(false);
+});
+keyConfigDialog.append(keyConfigClose);
+keyConfigLayer.append(keyConfigDialog);
+gameRoot.append(keyConfigLayer);
+const keyConfig = createKeyConfig(keyConfigDialog, profile, bindings, keyboard);
+
+/** キーコンフィグの層を開いているか */
+let keyConfigOpen = false;
+/**
+ * キーコンフィグの層を開く・閉じる。閉じるとき、入力待ち・一括設定の途中なら取り消す。
+ * 開いている間、層の後ろ（3 つの枠とメーター）は inert にして、Tab で後ろの検索欄に入れないようにする
+ * （入ると練習の入力が止まるため）。バーはそのまま押せる
+ */
+function setKeyConfigOpen(open: boolean): void {
+  if (!open) keyConfig.cancel();
+  keyConfigOpen = open;
+  keyConfigLayer.hidden = !open;
+  for (const child of gameRoot.children) {
+    if (child instanceof HTMLElement && child !== gameBar.el && child !== keyConfigLayer) child.inert = open;
+  }
+}
 
 type Tab = 'practice' | 'combo';
 let activeTab: Tab = 'practice';
-const tabDefs: readonly (readonly [Tab, string, HTMLElement])[] = [
-  ['practice', msg().tabPractice, practicePane],
-  ['combo', msg().tabCombo, comboPane],
+const tabDefs: readonly (readonly [Tab, string, readonly HTMLElement[]])[] = [
+  ['practice', msg().tabPractice, [practiceRoots.status, practiceRoots.select]],
+  ['combo', msg().tabCombo, [comboRoots.status, comboRoots.select]],
 ];
 const tabButtons = tabDefs.map(([tab, label]) => {
   const b = document.createElement('button');
@@ -203,12 +250,12 @@ const tabButtons = tabDefs.map(([tab, label]) => {
   return b;
 });
 function showTab(): void {
-  tabDefs.forEach(([tab, , pane], i) => {
-    pane.hidden = tab !== activeTab;
+  tabDefs.forEach(([tab, , panes], i) => {
+    for (const pane of panes) pane.hidden = tab !== activeTab;
     tabButtons[i]?.classList.toggle('active', tab === activeTab);
   });
 }
-tabBar.append(...tabButtons);
+gameBar.tabs.append(...tabButtons);
 showTab();
 
 const screens = createScreens(app, {
@@ -239,8 +286,8 @@ const screens = createScreens(app, {
       // 練習の途中の状態は捨てる
       comboPanel.reset();
     }
-    // 練習の途中で出たとき、キーコンフィグの捕まえを何も変えずに終える
-    if (prev === 'game') keyConfig.cancel();
+    // 練習の途中で出たとき、キーコンフィグの捕まえを何も変えずに終え、層も閉じる
+    if (prev === 'game') setKeyConfigOpen(false);
     if (screen === 'game') {
       // 決定に使った入力を押したまま入っても、離すまで練習の入力にしない。
       // 入った時刻より後に終わるフレームを 1 つ処理するまでは、捕まえ中として扱う

@@ -347,29 +347,49 @@ export function createScreens(root: HTMLElement, opts: ScreensOptions): Screens 
 
 export interface GameBar {
   readonly el: HTMLElement;
+  /** タブ（コマンド練習／コンボトライアル）のボタンを入れる場所 */
+  readonly tabs: HTMLElement;
   /** characterName はキャラを選んでいるときだけ渡す */
   readonly setGame: (id: GameId, characterName?: string) => void;
 }
 
-/** 練習画面の上に出す、ゲーム名（とキャラ名）と「キャラ選択へ」「タイトルへ」ボタン */
-export function createGameBar(root: HTMLElement, onCharSelect: () => void, onBack: () => void): GameBar {
+export interface GameBarHandlers {
+  readonly onCharSelect: () => void;
+  readonly onBack: () => void;
+  /** 「キーコンフィグ」を押したとき（開く・閉じるは呼ぶ側が決める） */
+  readonly onKeyConfig: () => void;
+}
+
+/** バーのボタン。押したらフォーカスを外す（Enter などが練習中に同じボタンを押し直さないように） */
+function barButton(text: string, onClick: () => void): HTMLButtonElement {
+  const b = el('button', undefined, text);
+  b.addEventListener('click', () => {
+    b.blur();
+    onClick();
+  });
+  return b;
+}
+
+/**
+ * 練習画面の一番上の「画面操作」のバー。左から、ゲーム名（とキャラ名）・注記・タブを入れる場所、
+ * 右寄せで「キーコンフィグ」「キャラ選択へ」「タイトルへ」
+ */
+export function createGameBar(root: HTMLElement, handlers: GameBarHandlers): GameBar {
   const bar = el('div', 'game-bar');
   const name = el('strong');
   const note = el('span', 'note');
-  const charSelect = el('button', undefined, msg().barCharSelect);
-  charSelect.addEventListener('click', () => {
-    charSelect.blur();
-    onCharSelect();
-  });
-  const back = el('button', undefined, msg().barTitle);
-  back.addEventListener('click', () => {
-    back.blur();
-    onBack();
-  });
-  bar.append(name, note, charSelect, back);
+  const tabs = el('nav', 'tabs');
+  const actions = el('div', 'game-bar-actions');
+  actions.append(
+    barButton(msg().barKeyConfig, handlers.onKeyConfig),
+    barButton(msg().barCharSelect, handlers.onCharSelect),
+    barButton(msg().barTitle, handlers.onBack),
+  );
+  bar.append(name, note, tabs, actions);
   root.append(bar);
   return {
     el: bar,
+    tabs,
     setGame: (id, characterName) => {
       const game = findGame(id)?.name ?? '';
       name.textContent = characterName === undefined ? game : `${game} / ${characterName}`;

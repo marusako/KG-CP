@@ -6,6 +6,7 @@ import type { CharacterData } from '../core/characters';
 import type { GameProfile } from '../core/profiles';
 import { filterItems } from '../core/search';
 import { createSearchInput } from './searchInput';
+import type { PanelRoots } from './panelRoots';
 import { readFirst, recipesKeys } from '../core/storageKeys';
 import type { FrameInput } from '../core/types';
 
@@ -104,12 +105,17 @@ export interface ComboPanel {
   readonly setProfile: (profile: GameProfile, character?: CharacterData) => void;
 }
 
+/**
+ * 選ぶ一覧（検索欄・レシピの一覧・JSON の読み込みと書き出し）を roots.select に、
+ * 挑戦の様子（選んでいるレシピの名前・手順の箱・結果の文・回数）を roots.status に置く
+ */
 export function createComboPanel(
-  root: HTMLElement,
+  roots: PanelRoots,
   initialProfile: GameProfile,
   initialCharacter?: CharacterData,
 ): ComboPanel {
   const section = document.createElement('section');
+  section.className = 'select-panel';
   const title = document.createElement('h2');
   title.textContent = msg().comboTitle;
   const search = createSearchInput(msg().comboSearchPlaceholder);
@@ -117,15 +123,18 @@ export function createComboPanel(
   list.className = 'command-list';
   const listNote = document.createElement('div');
   listNote.className = 'note';
-  const stepsView = document.createElement('div');
-  stepsView.className = 'combo-steps';
-  const result = document.createElement('div');
-  result.className = 'result';
-  const stats = document.createElement('div');
-  stats.className = 'note';
+  // JSON の部分はふだん閉じておく。読み込みの結果などの知らせは、閉じていても見えるよう外に出す
+  const jsonBox = document.createElement('details');
+  jsonBox.className = 'combo-json';
+  const jsonSummary = document.createElement('summary');
+  jsonSummary.textContent = msg().comboJsonSummary;
+  // 押したあとフォーカスが残ると、Space・Enter を練習のボタンに割り当てたとき、押すたびに開閉してしまう
+  // （開閉は click のあとに起きるので、blur しても開閉は止まらない）
+  jsonSummary.addEventListener('click', () => {
+    jsonSummary.blur();
+  });
   const jsonArea = document.createElement('textarea');
   jsonArea.rows = 8;
-  jsonArea.cols = 40;
   jsonArea.placeholder = msg().comboJsonPlaceholder;
   const jsonButtons = document.createElement('div');
   const loadBtn = document.createElement('button');
@@ -133,10 +142,23 @@ export function createComboPanel(
   const exportBtn = document.createElement('button');
   exportBtn.textContent = msg().comboExportJson;
   jsonButtons.append(loadBtn, exportBtn);
+  jsonBox.append(jsonSummary, jsonArea, jsonButtons);
   const message = document.createElement('div');
   message.className = 'note';
-  section.append(title, search, list, listNote, stepsView, result, stats, jsonArea, jsonButtons, message);
-  root.append(section);
+  section.append(title, search, list, listNote, jsonBox, message);
+  roots.select.append(section);
+
+  const status = document.createElement('section');
+  status.className = 'status-panel';
+  const currentName = document.createElement('h2');
+  const stepsView = document.createElement('div');
+  stepsView.className = 'combo-steps';
+  const result = document.createElement('div');
+  result.className = 'result';
+  const stats = document.createElement('div');
+  stats.className = 'note';
+  status.append(currentName, stepsView, result, stats);
+  roots.status.append(status);
 
   let profile = initialProfile;
   let characterId: string | undefined;
@@ -179,7 +201,9 @@ export function createComboPanel(
     stats.textContent = msg().comboStats(attempts, completes, rate);
   };
 
+  /** 最初の手に戻す。レシピを選び直したときも必ず通るので、状態表示の見出しもここで合わせる */
   const reset = () => {
+    currentName.textContent = current.name;
     state = initialTrialState();
     marks = [];
     result.className = 'result';
@@ -215,7 +239,9 @@ export function createComboPanel(
     list.replaceChildren(...buttons);
   };
 
+  // 読み込み・書き出しのボタンも、押したらフォーカスを外す（Space・Enter を割り当てたとき、練習中に押し直さないように）
   loadBtn.addEventListener('click', () => {
+    loadBtn.blur();
     let json: unknown;
     try {
       json = JSON.parse(jsonArea.value);
@@ -252,6 +278,7 @@ export function createComboPanel(
   });
 
   exportBtn.addEventListener('click', () => {
+    exportBtn.blur();
     jsonArea.value = toJson(current);
     message.className = 'note';
     message.textContent = msg().recipeExported;
