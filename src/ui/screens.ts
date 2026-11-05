@@ -1,8 +1,10 @@
+import { charactersFor } from '../core/characters';
 import { GAMES, findGame, type GameId } from '../core/games';
 import { firstEnabled, moveCursor, type MenuAction, type MenuItem } from '../core/menu';
+import { profileFor, type PlayableGameId } from '../core/profiles';
 import type { Settings } from '../core/settings';
 
-export type Screen = 'title' | 'gameSelect' | 'settings' | 'credits' | 'exit' | 'game';
+export type Screen = 'title' | 'gameSelect' | 'charSelect' | 'settings' | 'credits' | 'exit' | 'game';
 
 const VOLUME_STEP = 5;
 const REPO_URL = 'https://github.com/marusako/KG-CP';
@@ -14,6 +16,7 @@ const EXIT_MESSAGE = 'ブラウザ版は、ここからは閉じられません�
 const BACK_TO: Readonly<Record<Exclude<Screen, 'game'>, Screen | null>> = {
   title: null,
   gameSelect: 'title',
+  charSelect: 'gameSelect',
   settings: 'title',
   credits: 'settings',
   exit: 'title',
@@ -23,8 +26,10 @@ export interface ScreensOptions {
   getSettings: () => Settings;
   /** 音量が変わった */
   onVolume: (volume: number) => void;
-  /** ゲームが選ばれた（画面は game に切り替わる） */
+  /** ゲームが選ばれた（画面は charSelect に切り替わる） */
   onSelectGame: (id: GameId) => void;
+  /** キャラが選ばれた（null はキャラなし）。画面は game に切り替わる */
+  onSelectCharacter: (game: PlayableGameId, characterId: string | null) => void;
   /** 画面が切り替わった */
   onScreen: (screen: Screen, prev: Screen) => void;
 }
@@ -61,6 +66,8 @@ export function createScreens(root: HTMLElement, opts: ScreensOptions): Screens 
   root.append(container);
   let screen: Screen = 'title';
   const pages = new Map<Exclude<Screen, 'game'>, Page>();
+  /** キャラ選択の項目を、選んだゲームに合わせて作り直す（setScreen から呼ぶ。中身は charSelect の節で差し込む） */
+  let rebuildCharSelect: () => void = () => {};
   /** 音量を delta だけ変える（設定画面を作るときに差し込む） */
   let volumeAdjust: (delta: number) => void = () => {};
 
@@ -76,6 +83,7 @@ export function createScreens(root: HTMLElement, opts: ScreensOptions): Screens 
         page.cursor = i >= 0 ? i : firstEnabled(page.items);
       }
     }
+    if (next === 'charSelect') rebuildCharSelect();
     render();
     opts.onScreen(next, prev);
   };
@@ -150,9 +158,43 @@ export function createScreens(root: HTMLElement, opts: ScreensOptions): Screens 
       const g = GAMES[i];
       if (!g?.available) return;
       opts.onSelectGame(g.id);
-      setScreen('game');
+      setScreen('charSelect');
     };
     addPage('gameSelect', 'ゲーム選択', items, items.map((it, i) => menuButton(it, () => choose(i))), choose);
+  }
+
+  // charSelect（項目は、入るたびに選んだゲームに合わせて作り直す）
+  {
+    /** いま並べているゲーム。項目の番号 i（1 から）は charactersFor(game)[i - 1] */
+    let game: PlayableGameId | null = null;
+    const choose = (i: number): void => {
+      if (game === null) return;
+      const c = i === 0 ? undefined : charactersFor(game)[i - 1];
+      if (i > 0 && !c) return;
+      opts.onSelectCharacter(game, c?.id ?? null);
+      setScreen('game');
+    };
+    addPage('charSelect', 'キャラ選択', [], [], choose);
+    const page = pages.get('charSelect') as Page;
+    const list = page.el.querySelector('.menu') as HTMLElement;
+    rebuildCharSelect = () => {
+      const g = profileFor(opts.getSettings().lastGame)?.id ?? null;
+      game = g;
+      const chars = g === null ? [] : charactersFor(g);
+      page.items = [{ label: 'キャラなし（共通）' }, ...chars.map((c) => ({ label: c.name }))];
+      page.rows = page.items.map((it, i) => {
+        const row = menuButton(it, () => choose(i));
+        row.addEventListener('mouseenter', () => {
+          page.cursor = i;
+          render();
+        });
+        return row;
+      });
+      list.replaceChildren(...page.rows);
+      const last = g === null ? undefined : opts.getSettings().lastCharacter[g];
+      const at = chars.findIndex((c) => c.id === last);
+      page.cursor = at >= 0 ? at + 1 : 0;
+    };
   }
 
   // settings
@@ -259,25 +301,32 @@ export function createScreens(root: HTMLElement, opts: ScreensOptions): Screens 
 
 export interface GameBar {
   readonly el: HTMLElement;
-  readonly setGame: (id: GameId) => void;
+  /** characterName はキャラを選んでいるときだけ渡す */
+  readonly setGame: (id: GameId, characterName?: string) => void;
 }
 
-/** 練習画面の上に出す、ゲーム名と「タイトルへ」ボタン */
-export function createGameBar(root: HTMLElement, onBack: () => void): GameBar {
+/** 練習画面の上に出す、ゲーム名（とキャラ名）と「キャラ選択へ」「タイトルへ」ボタン */
+export function createGameBar(root: HTMLElement, onCharSelect: () => void, onBack: () => void): GameBar {
   const bar = el('div', 'game-bar');
   const name = el('strong');
   const note = el('span', 'note');
+  const charSelect = el('button', undefined, 'キャラ選択へ');
+  charSelect.addEventListener('click', () => {
+    charSelect.blur();
+    onCharSelect();
+  });
   const back = el('button', undefined, 'タイトルへ');
   back.addEventListener('click', () => {
     back.blur();
     onBack();
   });
-  bar.append(name, note, back);
+  bar.append(name, note, charSelect, back);
   root.append(bar);
   return {
     el: bar,
-    setGame: (id) => {
-      name.textContent = findGame(id)?.name ?? '';
+    setGame: (id, characterName) => {
+      const game = findGame(id)?.name ?? '';
+      name.textContent = characterName === undefined ? game : `${game} / ${characterName}`;
       note.textContent = id === 'sf6' ? '一部の猶予は公開資料の値です（2024年5月時点）' : '猶予は共通の値です';
     },
   };

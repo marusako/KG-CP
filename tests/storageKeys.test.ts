@@ -25,6 +25,27 @@ describe('recipesKeys（読み込んだレシピの保存場所）', () => {
   });
 });
 
+describe('recipesKeys（キャラごとの保存場所。第6段階 受け入れ条件 7）', () => {
+  it('キャラがあるときは、そのキャラのキーだけに保存し、読む', () => {
+    expect(recipesKeys('sf6', 'cammy')).toEqual({
+      save: 'kgcp.comboRecipes.sf6.cammy',
+      read: ['kgcp.comboRecipes.sf6.cammy'],
+    });
+    expect(recipesKeys('ggst', 'bridget')).toEqual({
+      save: 'kgcp.comboRecipes.ggst.bridget',
+      read: ['kgcp.comboRecipes.ggst.bridget'],
+    });
+  });
+  it('キャラなしは、いまと同じ', () => {
+    expect(recipesKeys('sf6', undefined)).toEqual(recipesKeys('sf6'));
+    expect(recipesKeys('sf6')).toEqual({ save: 'kgcp.comboRecipes.sf6', read: ['kgcp.comboRecipes.sf6', 'kgcp.comboRecipes'] });
+  });
+  it('キャラありのとき、前の版やキャラなしのデータは読まない', () => {
+    const get = (key: string) => ({ 'kgcp.comboRecipes.sf6': 'a', 'kgcp.comboRecipes': 'b' } as Record<string, string>)[key] ?? null;
+    expect(readFirst(get, recipesKeys('sf6', 'cammy').read)).toBeNull();
+  });
+});
+
 describe('readFirst', () => {
   const store = (data: Record<string, string>) => (key: string) => data[key] ?? null;
 

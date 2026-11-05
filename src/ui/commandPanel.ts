@@ -1,3 +1,5 @@
+import { createSearchInput } from './searchInput';
+import { filterItems } from '../core/search';
 import type { AttemptResult, CommandDef } from '../core/types';
 
 const RECENT_ATTEMPTS = 20;
@@ -24,24 +26,33 @@ export function describeResult(r: AttemptResult): string {
 export interface CommandPanel {
   readonly selected: () => CommandDef;
   readonly showResult: (r: AttemptResult) => void;
-  /** 一覧を入れ替え、先頭を選ぶ（成功率も数え直す） */
-  readonly setCommands: (commands: readonly CommandDef[]) => void;
+  /** 一覧を入れ替え、先頭を選ぶ（成功率も数え直し、検索欄は空に戻す）。notes は技の id → 注記 */
+  readonly setCommands: (commands: readonly CommandDef[], notes?: ReadonlyMap<string, string>) => void;
 }
 
-export function createCommandPanel(root: HTMLElement, commands: readonly CommandDef[]): CommandPanel {
+export function createCommandPanel(
+  root: HTMLElement,
+  commands: readonly CommandDef[],
+  initialNotes: ReadonlyMap<string, string> = new Map(),
+): CommandPanel {
   const section = document.createElement('section');
   const title = document.createElement('h2');
   title.textContent = '練習するコマンド';
+  const search = createSearchInput('名前・表記で絞り込み（例: 236、spiral）');
   const list = document.createElement('div');
   list.className = 'command-list';
+  const moveNote = document.createElement('div');
+  moveNote.className = 'note';
   const result = document.createElement('div');
   result.className = 'result';
   result.textContent = 'ボタンを押すと判定します';
   const rate = document.createElement('div');
   rate.className = 'note';
-  section.append(title, list, result, rate);
+  section.append(title, search, list, moveNote, result, rate);
   root.append(section);
 
+  let all = commands;
+  let notes = initialNotes;
   let current = commands[0] as CommandDef;
   let recent: boolean[] = [];
 
@@ -53,6 +64,10 @@ export function createCommandPanel(root: HTMLElement, commands: readonly Command
         : `直近の成功率: ${Math.round((ok / recent.length) * 100)}%（${ok}/${recent.length}）`;
   };
 
+  const updateNote = () => {
+    moveNote.textContent = notes.get(current.id) ?? '';
+  };
+
   const resetView = () => {
     recent = [];
     result.className = 'result';
@@ -60,14 +75,24 @@ export function createCommandPanel(root: HTMLElement, commands: readonly Command
     updateRate();
   };
 
-  const renderList = (commands: readonly CommandDef[]) => {
-    const buttons = commands.map((c) => {
+  const renderList = () => {
+    // 絞り込んで選んでいる技が一覧から消えても、選択はそのまま
+    const shown = filterItems(all, search.value, (c) => [c.name, c.notation]);
+    if (shown.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'note';
+      empty.textContent = '当たる技がありません';
+      list.replaceChildren(empty);
+      return;
+    }
+    const buttons = shown.map((c) => {
       const b = document.createElement('button');
       b.textContent = c.name;
       b.classList.toggle('active', c === current);
       b.addEventListener('click', () => {
         current = c;
         buttons.forEach((x) => x.classList.toggle('active', x === b));
+        updateNote();
         resetView();
         b.blur();
       });
@@ -76,14 +101,20 @@ export function createCommandPanel(root: HTMLElement, commands: readonly Command
     list.replaceChildren(...buttons);
   };
 
+  search.addEventListener('input', renderList);
   resetView();
-  renderList(commands);
+  updateNote();
+  renderList();
 
   return {
     selected: () => current,
-    setCommands: (next) => {
+    setCommands: (next, nextNotes = new Map()) => {
+      all = next;
+      notes = nextNotes;
       current = next[0] as CommandDef;
-      renderList(next);
+      search.value = '';
+      updateNote();
+      renderList();
       resetView();
     },
     showResult: (r) => {

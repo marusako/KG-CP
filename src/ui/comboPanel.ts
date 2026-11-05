@@ -1,6 +1,10 @@
 import { initialTrialState, isAttemptInProgress, parseRecipe, stepTrial } from '../core/combo';
 import type { ComboRecipe, TrialEvent, TrialState } from '../core/combo';
+import { comboToRecipe } from '../core/characters';
+import type { CharacterData } from '../core/characters';
 import type { GameProfile } from '../core/profiles';
+import { filterItems } from '../core/search';
+import { createSearchInput } from './searchInput';
 import { readFirst, recipesKeys } from '../core/storageKeys';
 import type { FrameInput } from '../core/types';
 
@@ -54,11 +58,11 @@ interface SavedData {
   unreadable: unknown[];
 }
 
-function loadSaved(profile: GameProfile, sampleIds: ReadonlySet<string>): SavedData {
+function loadSaved(profile: GameProfile, characterId: string | undefined, sampleIds: ReadonlySet<string>): SavedData {
   const empty: SavedData = { recipes: [], unreadable: [] };
   try {
     // 保存場所は recipesKeys のとおり（sf6 だけは、なければ前の版のキーも読む）
-    const raw = readFirst((k) => localStorage.getItem(k), recipesKeys(profile.id).read);
+    const raw = readFirst((k) => localStorage.getItem(k), recipesKeys(profile.id, characterId).read);
     if (!raw) return empty;
     const list: unknown = JSON.parse(raw);
     if (!Array.isArray(list)) return empty;
@@ -75,10 +79,10 @@ function loadSaved(profile: GameProfile, sampleIds: ReadonlySet<string>): SavedD
   }
 }
 
-function save(profile: GameProfile, recipes: readonly ComboRecipe[], unreadable: readonly unknown[]): boolean {
+function save(profile: GameProfile, characterId: string | undefined, recipes: readonly ComboRecipe[], unreadable: readonly unknown[]): boolean {
   try {
     const list = [...recipes.map((r) => JSON.parse(toJson(r)) as unknown), ...unreadable];
-    localStorage.setItem(recipesKeys(profile.id).save, JSON.stringify(list));
+    localStorage.setItem(recipesKeys(profile.id, characterId).save, JSON.stringify(list));
     return true;
   } catch {
     return false;
@@ -92,19 +96,26 @@ export interface ComboPanel {
   readonly reset: () => void;
   /** 挑戦の途中なら、最初の手に戻して理由を表示する（処理が止まったときなど）。途中でなければ何もしない */
   readonly invalidate: (reason: string) => void;
-  /** ゲームを切り替える。サンプル・表記のルール・保存したレシピを入れ替え、先頭のレシピを選び、回数を 0 にする */
-  readonly setProfile: (profile: GameProfile) => void;
+  /**
+   * ゲーム（とキャラ）を切り替える。サンプル（キャラがあるときはキャラのコンボ）・表記のルール・保存したレシピを入れ替え、
+   * 先頭のレシピを選び、回数を 0 にし、検索欄を空に戻す。保存したレシピの場所はキャラごと
+   */
+  readonly setProfile: (profile: GameProfile, character?: CharacterData) => void;
 }
 
 export function createComboPanel(
   root: HTMLElement,
   initialProfile: GameProfile,
+  initialCharacter?: CharacterData,
 ): ComboPanel {
   const section = document.createElement('section');
   const title = document.createElement('h2');
   title.textContent = 'コンボトライアル';
+  const search = createSearchInput('名前・表記で絞り込み（例: 623、2LK）');
   const list = document.createElement('div');
   list.className = 'command-list';
+  const listNote = document.createElement('div');
+  listNote.className = 'note';
   const stepsView = document.createElement('div');
   stepsView.className = 'combo-steps';
   const result = document.createElement('div');
@@ -123,10 +134,11 @@ export function createComboPanel(
   jsonButtons.append(loadBtn, exportBtn);
   const message = document.createElement('div');
   message.className = 'note';
-  section.append(title, list, stepsView, result, stats, jsonArea, jsonButtons, message);
+  section.append(title, search, list, listNote, stepsView, result, stats, jsonArea, jsonButtons, message);
   root.append(section);
 
   let profile = initialProfile;
+  let characterId: string | undefined;
   let samples: readonly ComboRecipe[] = [];
   let saved: SavedData = { recipes: [], unreadable: [] };
   let recipes: ComboRecipe[] = [];
@@ -175,7 +187,16 @@ export function createComboPanel(
   };
 
   const renderList = () => {
-    const buttons = recipes.map((r) => {
+    // 絞り込んで選んでいるレシピが一覧から消えても、選択はそのまま
+    const shown = filterItems(recipes, search.value, (r) => [r.name, ...r.steps.map((s) => s.text)]);
+    if (shown.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'note';
+      empty.textContent = '当たるコンボがありません';
+      list.replaceChildren(empty);
+      return;
+    }
+    const buttons = shown.map((r) => {
       const b = document.createElement('button');
       b.textContent = r.name;
       b.classList.toggle('active', r === current);
@@ -219,7 +240,7 @@ export function createComboPanel(
     current = r.recipe;
     attempts = 0;
     completes = 0;
-    const ok = save(profile, recipes.slice(samples.length), saved.unreadable);
+    const ok = save(profile, characterId, recipes.slice(samples.length), saved.unreadable);
     message.className = 'note';
     message.textContent = ok
       ?`「${r.recipe.name}」を読み込みました`
@@ -235,11 +256,20 @@ export function createComboPanel(
     message.textContent = '選んでいるレシピを書き出しました';
   });
 
-  /** ゲームの設定に合わせて、レシピの一覧と保存データを読み直す */
-  const applyProfile = (next: GameProfile) => {
+  search.addEventListener('input', renderList);
+
+  /** ゲーム（とキャラ）に合わせて、レシピの一覧と保存データを読み直す */
+  const applyProfile = (next: GameProfile, character?: CharacterData) => {
     profile = next;
-    samples = next.samples;
-    saved = loadSaved(next, new Set(samples.map((s) => s.id)));
+    characterId = character?.id;
+    // キャラのコンボは、読めないものがあれば出さない。一覧が 0 件にならないことは、データのテスト
+    // （tests/characters.test.ts の「キャラを足すときの守り」）で確かめている
+    samples = character
+      ? character.combos.flatMap((c) => comboToRecipe(c, next) ?? [])
+      : next.samples;
+    listNote.textContent = character ? 'キャラのコンボの窓は仮の値です' : '';
+    search.value = '';
+    saved = loadSaved(next, characterId, new Set(samples.map((s) => s.id)));
     recipes = [...samples, ...saved.recipes];
     current = recipes[0] as ComboRecipe;
     attempts = 0;
@@ -256,7 +286,7 @@ export function createComboPanel(
     renderStats();
     reset();
   };
-  applyProfile(initialProfile);
+  applyProfile(initialProfile, initialCharacter);
 
   return {
     reset,

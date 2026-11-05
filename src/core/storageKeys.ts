@@ -16,8 +16,15 @@ export function bindingsKeys(id: PlayableGameId): StorageKeys {
   return keysFor(id, `kg-cp:bindings:${id}`, 'kg-cp:bindings');
 }
 
-/** 読み込んだコンボのレシピの保存場所 */
-export function recipesKeys(id: PlayableGameId): StorageKeys {
+/**
+ * 読み込んだコンボのレシピの保存場所。キャラを選んでいるときはキャラごと
+ * （前の版のキーはキャラなしの保存なので、読まない）
+ */
+export function recipesKeys(id: PlayableGameId, characterId?: string): StorageKeys {
+  if (characterId !== undefined) {
+    const key = `kgcp.comboRecipes.${id}.${characterId}`;
+    return { save: key, read: [key] };
+  }
   return keysFor(id, `kgcp.comboRecipes.${id}`, 'kgcp.comboRecipes');
 }
 

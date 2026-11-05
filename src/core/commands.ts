@@ -104,6 +104,40 @@ export const SF6_COMMANDS: CommandDef[] = [
   },
 ];
 
+const SF6_BUTTONS = ['LP', 'MP', 'HP', 'LK', 'MK', 'HK'] as const;
+
+/**
+ * スト6 の表記用のモーション一覧。方向の部分ごとに 1 つで、ボタンは 6 つ全部。
+ * これで 236K・623K・236236K のように、技ごとのボタンで書けるようになる（parseStep が表記のボタンで絞る）。
+ * 方向・猶予・溜めは SF6_COMMANDS の同じ表記のものと同じ。
+ * 236236・214214 の猶予は 236・214 を 2 回続けるものとして、LONG_MOTION_WINDOW と BUTTON_WINDOW を使う（どちらも仮の値）
+ */
+export const SF6_MOTIONS: CommandDef[] = [
+  ...SF6_COMMANDS.map(
+    (c): CommandDef => ({ ...c, id: `sf6-${c.notation}`, name: `${c.notation} + ボタン`, buttons: SF6_BUTTONS }),
+  ),
+  {
+    kind: 'motion',
+    id: 'sf6-236236',
+    name: '236236 + ボタン',
+    notation: '236236',
+    steps: [step(2), step(3), step(6), step(2), step(3), step(6)],
+    buttons: SF6_BUTTONS,
+    motionWindow: LONG_MOTION_WINDOW,
+    buttonWindow: BUTTON_WINDOW,
+  },
+  {
+    kind: 'motion',
+    id: 'sf6-214214',
+    name: '214214 + ボタン',
+    notation: '214214',
+    steps: [step(2), step(1), step(4), step(2), step(1), step(4)],
+    buttons: SF6_BUTTONS,
+    motionWindow: LONG_MOTION_WINDOW,
+    buttonWindow: BUTTON_WINDOW,
+  },
+];
+
 const GG_BUTTONS = ['P', 'K', 'S', 'HS', 'D'] as const;
 
 /** GG のコマンド 1 つ。猶予は共通の値 */
@@ -140,9 +174,9 @@ export const GG_COMMANDS: CommandDef[] = [
 
 /** 表記のルール。profiles.ts とサンプルの読み込みが使う（profiles.ts を読み込むと循環するため、ここに置く） */
 export const SF6_RULES: NotationRules = {
-  buttons: ['LP', 'MP', 'HP', 'LK', 'MK', 'HK'],
+  buttons: SF6_BUTTONS,
   buttonGroups: { P: PUNCH, K: KICK },
-  commands: SF6_COMMANDS,
+  commands: SF6_MOTIONS,
 };
 export const GG_RULES: NotationRules = {
   buttons: GG_BUTTONS,

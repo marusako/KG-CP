@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { GG_COMMANDS, SF6_COMMANDS } from '../src/core/commands';
+import { GG_COMMANDS, SF6_COMMANDS, SF6_MOTIONS, SF6_RULES } from '../src/core/commands';
+import { parseStep } from '../src/core/notation';
 import { analyzeAttempt } from '../src/core/detect';
 import type { CommandDef, Direction, FrameInput } from '../src/core/types';
 
@@ -177,5 +178,95 @@ describe('GG のコマンドを素直に入れてボタンを押すと成立す�
   it('SF6 のボタン (LP) では GG のコマンドは試行にならない（null）', () => {
     const c = byId(GG_COMMANDS, 'gg-236');
     expect(analyzeAttempt(motionHistory([2, 3, 6], 'LP'), c)).toBeNull();
+  });
+});
+
+describe('SF6_MOTIONS と SF6_RULES (第6段階 受け入れ条件 1)', () => {
+  const ALL6 = ['LP', 'MP', 'HP', 'LK', 'MK', 'HK'];
+  const readCommand = (text: string) => {
+    const r = parseStep(text, SF6_RULES);
+    if (!r.ok) throw new Error(`読めませんでした: ${text} (${r.error})`);
+    if (r.input.kind !== 'command') throw new Error(`${text} がコマンドではありません`);
+    return r.input;
+  };
+  const shapeOf = (c: CommandDef) => {
+    const { id: _id, name: _name, buttons: _buttons, ...rest } = c as CommandDef & Record<string, unknown>;
+    return rest;
+  };
+
+  it('SF6_MOTIONS は 10 個の表記で、ボタンはスト6 の 6 つ全部', () => {
+    expect(SF6_MOTIONS.map(notationOf).sort()).toEqual(
+      ['236', '214', '623', '41236', '63214', '[4]6', '[2]8', '360', '236236', '214214'].sort(),
+    );
+    for (const c of SF6_MOTIONS) expect([...c.buttons].sort()).toEqual([...ALL6].sort());
+  });
+
+  it('SF6_MOTIONS の方向・窓・溜めは、SF6_COMMANDS の同じ表記と同じ', () => {
+    for (const old of SF6_COMMANDS) {
+      const m = SF6_MOTIONS.find((c) => notationOf(c) === notationOf(old));
+      if (!m) throw new Error(`SF6_MOTIONS に ${notationOf(old)} がありません`);
+      expect(shapeOf(m)).toEqual(shapeOf(old));
+    }
+  });
+
+  it('236236・214214 は motionWindow 25、buttonWindow 6、方向は 236 / 214 を 2 回', () => {
+    for (const [n, dirs] of [
+      ['236236', [[2], [3], [6], [2], [3], [6]]],
+      ['214214', [[2], [1], [4], [2], [1], [4]]],
+    ] as const) {
+      const m = SF6_MOTIONS.find((c) => notationOf(c) === n);
+      if (!m) throw new Error(`SF6_MOTIONS に ${n} がありません`);
+      expect(m).toMatchObject({ motionWindow: 25, buttonWindow: 6 });
+      expect(dirsOf(m)).toEqual(dirs.map((d) => [...d]));
+    }
+  });
+
+  it('SF6_RULES で 236K・623K・214P・236236K・214214P・236236P が読める', () => {
+    const cases: [string, string[]][] = [
+      ['236K', ['LK', 'MK', 'HK']],
+      ['623K', ['LK', 'MK', 'HK']],
+      ['214P', ['LP', 'MP', 'HP']],
+      ['236236K', ['LK', 'MK', 'HK']],
+      ['214214P', ['LP', 'MP', 'HP']],
+      ['236236P', ['LP', 'MP', 'HP']],
+    ];
+    for (const [text, buttons] of cases) {
+      expect([...readCommand(text).buttons].sort()).toEqual([...buttons].sort());
+    }
+  });
+
+  it('236K は 236P と同じ方向・窓、623K は 623P と同じ (buttonWindow 6)', () => {
+    expect(shapeOf(readCommand('236K').command)).toEqual(shapeOf(byId(SF6_COMMANDS, '236P')));
+    expect(shapeOf(readCommand('623K').command)).toEqual(shapeOf(byId(SF6_COMMANDS, '623P')));
+    expect(readCommand('623K').command).toMatchObject({ motionWindow: 15, buttonWindow: 6 });
+  });
+
+  it('236236K・214214P の窓は 25 / 6', () => {
+    expect(readCommand('236236K').command).toMatchObject({ motionWindow: 25, buttonWindow: 6 });
+    expect(readCommand('214214P').command).toMatchObject({ motionWindow: 25, buttonWindow: 6 });
+  });
+
+  it('いま読める表記は、同じ方向・窓・ボタンで読める', () => {
+    const cases: [string, string, string[]][] = [
+      ['236HP', '236P', ['HP']],
+      ['214LP', '214P', ['LP']],
+      ['623MP', '623P', ['MP']],
+      ['41236HP', '41236P', ['HP']],
+      ['63214LP', '63214P', ['LP']],
+      ['[4]6P', '[4]6P', ['LP', 'MP', 'HP']],
+      ['[2]8HK', '[2]8K', ['HK']],
+      ['360LP', '360P', ['LP']],
+    ];
+    for (const [text, id, buttons] of cases) {
+      const i = readCommand(text);
+      expect(shapeOf(i.command)).toEqual(shapeOf(byId(SF6_COMMANDS, id)));
+      expect([...i.buttons].sort()).toEqual([...buttons].sort());
+    }
+  });
+
+  it('SF6_COMMANDS は変わらない (8 個・同じ id と順)', () => {
+    expect(SF6_COMMANDS.map((c) => c.id)).toEqual([
+      '236P', '214P', '623P', '41236P', '63214P', '[4]6P', '[2]8K', '360P',
+    ]);
   });
 });

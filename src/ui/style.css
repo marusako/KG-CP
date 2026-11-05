@@ -67,3 +67,5 @@ textarea { display: block; margin: 12px 0 8px; background: #15171c; color: inher
 .menu-back { margin-top: 8px; }
 .screen p { margin: 12px 0; }
 .screen a { color: #7fd1ff; }
+.search-input { box-sizing: border-box; width: 100%; margin-bottom: 8px; padding: 6px 8px; background: #15171c; color: inherit; border: 1px solid #444; border-radius: 4px; }
+.search-input:focus { border-color: #ffd166; outline: none; }

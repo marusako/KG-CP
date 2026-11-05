@@ -3,7 +3,7 @@ import { DEFAULT_SETTINGS, parseSettings, serializeSettings } from '../src/core/
 
 describe('DEFAULT_SETTINGS (受け入れ条件 4)', () => {
   it('volume 80・lastGame null', () => {
-    expect(DEFAULT_SETTINGS).toEqual({ volume: 80, lastGame: null });
+    expect(DEFAULT_SETTINGS).toEqual({ volume: 80, lastGame: null, lastCharacter: {} });
   });
 });
 
@@ -106,6 +106,7 @@ describe('parseSettings: 項目ごとに見る (受け入れ条件 4)', () => {
     expect(parseSettings('{"volume":25,"lastGame":"mbtl"}')).toEqual({
       volume: 25,
       lastGame: null,
+      lastCharacter: {},
     });
   });
 
@@ -113,6 +114,7 @@ describe('parseSettings: 項目ごとに見る (受け入れ条件 4)', () => {
     expect(parseSettings('{"volume":"abc","lastGame":"ggst"}')).toEqual({
       volume: 80,
       lastGame: 'ggst',
+      lastCharacter: {},
     });
   });
 
@@ -120,26 +122,86 @@ describe('parseSettings: 項目ごとに見る (受け入れ条件 4)', () => {
     expect(parseSettings('{"volume":10,"lastGame":"sf6","extra":1}')).toEqual({
       volume: 10,
       lastGame: 'sf6',
+      lastCharacter: {},
     });
   });
 });
 
 describe('serializeSettings (受け入れ条件 4)', () => {
   it('文字列を返し、JSON として読める', () => {
-    const text = serializeSettings({ volume: 60, lastGame: 'sf6' });
+    const text = serializeSettings({ volume: 60, lastGame: 'sf6', lastCharacter: {} });
     expect(typeof text).toBe('string');
     expect(() => JSON.parse(text)).not.toThrow();
   });
 
   it('parse して戻すと同じ (往復)', () => {
     const cases = [
-      { volume: 0, lastGame: null },
-      { volume: 100, lastGame: 'sf6' },
-      { volume: 37, lastGame: 'ggst' },
+      { volume: 0, lastGame: null, lastCharacter: {} },
+      { volume: 100, lastGame: 'sf6', lastCharacter: {} },
+      { volume: 37, lastGame: 'ggst', lastCharacter: {} },
+      { volume: 50, lastGame: 'sf6', lastCharacter: { sf6: 'cammy' } },
+      { volume: 50, lastGame: 'ggst', lastCharacter: { sf6: 'cammy', ggst: 'bridget' } },
       DEFAULT_SETTINGS,
     ] as const;
     for (const s of cases) {
       expect(parseSettings(serializeSettings(s))).toEqual(s);
     }
+  });
+});
+
+describe('parseSettings: lastCharacter (第6段階 受け入れ条件 6)', () => {
+  const lc = (v: string) => parseSettings(`{"lastCharacter":${v}}`).lastCharacter;
+
+  it('前の版の保存 (lastCharacter なし) を読むと {}', () => {
+    expect(parseSettings('{"volume":50,"lastGame":"sf6"}')).toEqual({
+      volume: 50,
+      lastGame: 'sf6',
+      lastCharacter: {},
+    });
+  });
+
+  it('正しい id はそのまま残る', () => {
+    expect(lc('{"sf6":"cammy","ggst":"bridget"}')).toEqual({ sf6: 'cammy', ggst: 'bridget' });
+  });
+
+  it('知らないキャラの id は捨てる', () => {
+    expect(lc('{"sf6":"nobody"}')).toEqual({});
+  });
+
+  it('違うゲームのキャラの id は捨てる', () => {
+    expect(lc('{"sf6":"bridget","ggst":"cammy"}')).toEqual({});
+  });
+
+  it('文字列でない値は捨てる', () => {
+    expect(lc('{"sf6":1,"ggst":null}')).toEqual({});
+    expect(lc('{"sf6":["cammy"]}')).toEqual({});
+    expect(lc('{"sf6":true}')).toEqual({});
+  });
+
+  it('一部だけおかしければ、残りは残る', () => {
+    expect(lc('{"sf6":"cammy","ggst":"cammy"}')).toEqual({ sf6: 'cammy' });
+  });
+
+  it('知らないゲームのキーは捨てる', () => {
+    expect(lc('{"mbtl":"cammy"}')).toEqual({});
+  });
+
+  it('オブジェクトでない lastCharacter は {}', () => {
+    expect(lc('"cammy"')).toEqual({});
+    expect(lc('[1]')).toEqual({});
+    expect(lc('null')).toEqual({});
+  });
+
+  it('lastCharacter がおかしくても、volume・lastGame は保存した値のまま', () => {
+    expect(parseSettings('{"volume":25,"lastGame":"ggst","lastCharacter":"x"}')).toEqual({
+      volume: 25,
+      lastGame: 'ggst',
+      lastCharacter: {},
+    });
+  });
+
+  it('serializeSettings は lastCharacter も書く', () => {
+    const text = serializeSettings({ volume: 60, lastGame: 'sf6', lastCharacter: { sf6: 'cammy' } });
+    expect(JSON.parse(text).lastCharacter).toEqual({ sf6: 'cammy' });
   });
 });

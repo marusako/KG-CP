@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseStep } from '../src/core/notation';
 import { GG_COMMANDS, SF6_COMMANDS } from '../src/core/commands';
 import { PROFILES } from '../src/core/profiles';
+import type { CommandDef } from '../src/core/types';
 
 const JAPANESE = /[぀-ヿ一-鿿]/;
 
@@ -18,6 +19,19 @@ function ok(text: string) {
 }
 
 const sorted = (a: readonly (string | number)[]) => [...a].sort();
+
+// SF6_RULES.commands は SF6_COMMANDS と別の一覧になった（第6段階）。id・name・buttons 以外の形が同じかを見る
+const shapeOf = (c: CommandDef) => {
+  const { id: _id, name: _name, buttons: _buttons, ...rest } = c as CommandDef & Record<string, unknown>;
+  return rest;
+};
+function expectCommand(text: string, id: string, buttons: readonly string[]) {
+  const i = ok(text);
+  expect(i.kind).toBe('command');
+  if (i.kind !== 'command') return;
+  expect(shapeOf(i.command)).toEqual(shapeOf(cmd(id)));
+  expect(sorted(i.buttons)).toEqual(sorted(buttons));
+}
 
 describe('parseStep: 通常技 (受け入れ条件 1)', () => {
   it('2LP は kind=normal、dirs=[1,2,3]、buttons=[LP]', () => {
@@ -58,15 +72,11 @@ describe('parseStep: 通常技 (受け入れ条件 1)', () => {
 
 describe('parseStep: 必殺技 (受け入れ条件 1)', () => {
   it('236HP は 236P の定義で buttons=[HP]', () => {
-    expect(ok('236HP')).toEqual({ kind: 'command', command: cmd('236P'), buttons: ['HP'] });
+    expectCommand('236HP', '236P', ['HP']);
   });
 
   it('236P は 236P の定義の buttons のまま', () => {
-    expect(ok('236P')).toEqual({
-      kind: 'command',
-      command: cmd('236P'),
-      buttons: cmd('236P').buttons,
-    });
+    expectCommand('236P', '236P', ['LP', 'MP', 'HP']);
   });
 
   it('それぞれの技を id に対応する定義へ引き当てる', () => {
@@ -79,26 +89,20 @@ describe('parseStep: 必殺技 (受け入れ条件 1)', () => {
     for (const [text, id] of cases) {
       const i = ok(text);
       expect(i.kind).toBe('command');
-      if (i.kind === 'command') expect(i.command).toEqual(cmd(id));
+      if (i.kind === 'command') expect(shapeOf(i.command)).toEqual(shapeOf(cmd(id)));
     }
   });
 
   it('溜め [4]6P は buttons が LP MP HP', () => {
-    const i = ok('[4]6P');
-    expect(i.kind).toBe('command');
-    if (i.kind !== 'command') return;
-    expect(i.command).toEqual(cmd('[4]6P'));
-    expect(sorted(i.buttons)).toEqual(['HP', 'LP', 'MP']);
+    expectCommand('[4]6P', '[4]6P', ['LP', 'MP', 'HP']);
   });
 
   it('溜め [2]8K は K 系の定義に当たる。HK 指定なら [HK]', () => {
-    const i = ok('[2]8HK');
-    expect(i).toEqual({ kind: 'command', command: cmd('[2]8K'), buttons: ['HK'] });
+    expectCommand('[2]8HK', '[2]8K', ['HK']);
   });
 
   it('360 は rotation の 360P に当たる', () => {
-    const i = ok('360LP');
-    expect(i).toEqual({ kind: 'command', command: cmd('360P'), buttons: ['LP'] });
+    expectCommand('360LP', '360P', ['LP']);
     expect(cmd('360P').kind).toBe('rotation');
   });
 
@@ -108,7 +112,7 @@ describe('parseStep: 必殺技 (受け入れ条件 1)', () => {
 });
 
 describe('parseStep: 読めない表記 (受け入れ条件 1)', () => {
-  const bad = ['', 'LP', '2', '236', '2XX', 'abc', '0LP', '236LK', '999HP', '2 LP LP', '[4]6K'];
+  const bad = ['', 'LP', '2', '236', '2XX', 'abc', '0LP', '999HP', '2 LP LP'];
   for (const text of bad) {
     it(`"${text}" は ok:false`, () => {
       const r = parseStep(text, PROFILES.sf6);
@@ -124,14 +128,6 @@ describe('parseStep: 読めない表記 (受け入れ条件 1)', () => {
       expect(r.error).toContain('abc');
     }
   });
-});
-
-describe('parseStep: スト6 で P の技に K は使えない (受け入れ条件 1)', () => {
-  for (const text of ['236K', '236LK', '[4]6K', '[2]8P']) {
-    it(`"${text}" は ok:false`, () => {
-      expect(parseStep(text, PROFILES.sf6).ok).toBe(false);
-    });
-  }
 });
 
 describe('parseStep: GG のルール (受け入れ条件 1)', () => {

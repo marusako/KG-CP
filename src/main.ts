@@ -2,7 +2,7 @@ import './ui/style.css';
 import { analyzeAttempt } from './core/detect';
 import { compressHistory, historyAfterStall } from './core/history';
 import { createFrameClock, dueFrames, type FrameClock } from './core/clock';
-import type { FrameInput } from './core/types';
+import type { CommandDef, FrameInput } from './core/types';
 import { dropDisconnected, nextActiveDevice, type Device } from './input/activeDevice';
 import {
   INITIAL_GATE,
@@ -19,7 +19,8 @@ import { resolveDirection } from './input/direction';
 import { readGamepads, type PadInfo, type PadState } from './input/gamepad';
 import { KeyboardReader } from './input/keyboard';
 import { detectPadFamily } from './input/padLayout';
-import { PROFILES, profileFor, type GameProfile } from './core/profiles';
+import { findCharacter, moveToCommand, type CharacterData } from './core/characters';
+import { PROFILES, profileFor, type GameProfile, type PlayableGameId } from './core/profiles';
 import type { GameId } from './core/games';
 import { NO_MENU_BUTTONS, menuActions, type MenuAction, type MenuButtons } from './core/menu';
 import { DEFAULT_SETTINGS, parseSettings, serializeSettings, type Settings } from './core/settings';
@@ -68,14 +69,35 @@ let settings = loadSettings();
 let profile: GameProfile = profileFor(settings.lastGame) ?? PROFILES.sf6;
 let bindings = loadBindings(profile);
 
-/** game に入るとき、前と違うゲームなら、パネルを作り直さずに中身を入れ替える */
-function switchGame(next: GameProfile): void {
-  if (next.id === profile.id) return;
+/** いま練習しているキャラ。null はキャラなし */
+let character: CharacterData | null = findCharacter(profile.id, settings.lastCharacter[profile.id]) ?? null;
+
+/** キャラの技を、コマンド練習の一覧（読めないものは除く）と注記にする */
+function practiceOf(p: GameProfile, c: CharacterData | null): { commands: CommandDef[]; notes: Map<string, string> } {
+  if (c === null) return { commands: [...p.practiceCommands], notes: new Map() };
+  const commands = c.moves.flatMap((m) => moveToCommand(m, p) ?? []);
+  const notes = new Map(c.moves.flatMap((m) => (m.note === undefined ? [] : [[m.id, m.note] as const])));
+  return { commands, notes };
+}
+
+/** game に入るとき、前と違うゲーム・キャラなら、パネルを作り直さずに中身を入れ替える */
+function switchPractice(next: GameProfile, nextCharacter: CharacterData | null): void {
+  const gameChanged = next.id !== profile.id;
+  if (!gameChanged && nextCharacter?.id === character?.id) return;
   profile = next;
-  bindings = loadBindings(next);
-  panel.setCommands(next.commands);
-  comboPanel.setProfile(next);
-  keyConfig.setProfile(next, bindings);
+  character = nextCharacter;
+  const { commands, notes } = practiceOf(next, nextCharacter);
+  panel.setCommands(commands, notes);
+  comboPanel.setProfile(next, nextCharacter ?? undefined);
+  if (gameChanged) {
+    bindings = loadBindings(next);
+    keyConfig.setProfile(next, bindings);
+  }
+}
+
+/** 検索欄にフォーカスがあるか（文字を打っている間は練習の入力にしない） */
+function isSearchFocused(): boolean {
+  return document.activeElement instanceof HTMLElement && document.activeElement.classList.contains('search-input');
 }
 
 /** 練習画面（game のときだけ見せる）。レイアウトに影響しないよう display: contents で包む */
@@ -83,9 +105,16 @@ const gameRoot = document.createElement('div');
 gameRoot.className = 'game-root';
 app.append(gameRoot);
 
-const gameBar = createGameBar(gameRoot, () => {
-  screens.show('title');
-});
+const gameBar = createGameBar(
+  gameRoot,
+  () => {
+    screens.show('charSelect');
+  },
+  () => {
+    screens.show('title');
+  },
+);
+gameBar.setGame(profile.id, character?.name);
 const tabBar = document.createElement('nav');
 tabBar.className = 'tabs';
 gameRoot.append(tabBar);
@@ -95,8 +124,9 @@ practicePane.className = 'tab-pane';
 const comboPane = document.createElement('div');
 comboPane.className = 'tab-pane';
 gameRoot.append(practicePane, comboPane);
-const panel = createCommandPanel(practicePane, profile.commands);
-const comboPanel = createComboPanel(comboPane, profile);
+const initialPractice = practiceOf(profile, character);
+const panel = createCommandPanel(practicePane, initialPractice.commands, initialPractice.notes);
+const comboPanel = createComboPanel(comboPane, profile, character ?? undefined);
 const keyConfig = createKeyConfig(gameRoot, profile, bindings, keyboard);
 
 type Tab = 'practice' | 'combo';
@@ -134,13 +164,18 @@ const screens = createScreens(app, {
   onSelectGame: (id: GameId) => {
     settings = { ...settings, lastGame: id };
     saveSettings(settings);
-    gameBar.setGame(id);
+  },
+  onSelectCharacter: (game: PlayableGameId, characterId: string | null) => {
+    const { [game]: _old, ...rest } = settings.lastCharacter;
+    settings = { ...settings, lastCharacter: characterId === null ? rest : { ...rest, [game]: characterId } };
+    saveSettings(settings);
+    gameBar.setGame(game, findCharacter(game, characterId)?.name);
   },
   onScreen: (screen: Screen, prev: Screen) => {
     gameRoot.hidden = screen !== 'game';
     if (screen === 'game') {
       const next = profileFor(settings.lastGame);
-      if (next) switchGame(next);
+      if (next) switchPractice(next, findCharacter(next.id, settings.lastCharacter[next.id]) ?? null);
     }
     if (screen === 'game' || prev === 'game') {
       // 練習の途中の状態は捨てる
@@ -230,7 +265,7 @@ let lastPadTimestamp: number | null = null;
 function refreshPad(): void {
   pad = readGamepads();
   // この読み取りで捕まえが終わっても、今回の押下はゲームにも操作中のデバイスにも使わない
-  const wasCapturing = keyConfig.isCapturing();
+  const wasCapturing = keyConfig.isCapturing() || isSearchFocused();
   if (wasCapturing) gate = gateSawCapturing(gate);
   // 練習以外の画面のボタンは、キーコンフィグの割り当てに使わない
   if (screens.current() === 'game') {
@@ -266,8 +301,8 @@ function stepFrame(end: number): void {
   // キー入力から、そのイベントを取り出したフレームを処理するまでの遅れ（計測パネル用）
   const processedAt = performance.now();
   for (const t of downTimes) metrics.onKeyLatency(processedAt - t);
-  // キーコンフィグで入力待ちの間と、その間に押していた入力を離すまでは、ゲームの入力に使わない
-  const capturing = keyConfig.isCapturing();
+  // キーコンフィグで入力待ちの間や検索欄に文字を打っている間と、その間に押していた入力を離すまでは、ゲームの入力に使わない
+  const capturing = keyConfig.isCapturing() || isSearchFocused();
   const gated = gateFrame(gate, { capturing, onGameScreen: screens.current() === 'game', frameEnd: end });
   gate = gated.state;
   const filtered = filterInput(
