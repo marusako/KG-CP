@@ -19,9 +19,10 @@ export const INITIAL_DUMMY: DummyState = { phase: 'free', remaining: 0 };
 
 /**
  * 1 フレーム進める。dummy は前のフレームの相手、fighter はこのフレームのキャラ（stepFighter のあと）。
+ * - キャラがヒットストップで止まっている（fighter.frozen）フレームは、相手も止まる（同じ dummy・fighter・contact: null を返す）
  * - 技は持続の 1 フレーム目（phase 'active' かつ frame 0）に必ず当たる（距離は考えない）。
  *   ただし相手がダウン中、またはその切り替えで技の反応のデータがない（contactReaction が null）なら当たらない
- * - 当たったら、相手は反応の種類と長さになり（硬直中でも足さずに置き換える）、fighter には contact の印を付ける。
+ * - 当たったら、相手は反応の種類と長さになり（硬直中でも足さずに置き換える）、fighter には contact の印と、技の hitstop（1 以上のとき）を付ける。
  *   combo は、前のフレームの相手が同じ種類の硬直（ヒットなら hitstun、ガードなら blockstun）で、まだ 1 フレームより長く残っていたとき
  * - 当たらなければ、相手の remaining を 1 減らし、0 になったら free
  * - 変わらないときは同じ dummy・同じ fighter を返す
@@ -31,6 +32,7 @@ export function stepDummy(
   fighter: FighterState,
   mode: DummyMode,
 ): { dummy: DummyState; fighter: FighterState; contact: Contact | null } {
+  if (fighter.frozen === true) return { dummy, fighter, contact: null };
   const move = fighter.move;
   const reaction =
     fighter.phase === 'active' && fighter.frame === 0 && move !== null && dummy.phase !== 'down'
@@ -40,7 +42,7 @@ export function stepDummy(
     const sameStun = dummy.phase === (mode === 'hit' ? 'hitstun' : 'blockstun');
     return {
       dummy: { phase: reaction.kind, remaining: reaction.frames },
-      fighter: { ...fighter, contact: true },
+      fighter: { ...fighter, contact: true, ...(move !== null && (move.hitstop ?? 0) >= 1 ? { hitstop: move.hitstop } : {}) },
       contact: {
         kind: mode,
         knockdown: reaction.kind === 'down',

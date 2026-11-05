@@ -140,7 +140,8 @@ const ja = {
   frameMeterTitle: 'フレームメーター',
   frameMeterMoves: (texts: readonly string[]) => texts.join(' → '),
   frameMeterLegend:
-    '緑: 発生（数 + 1 が発生のフレーム）　赤: 持続　青: 硬直　灰: 動ける　水色: ジャンプ　橙の枠: 先行入力　黄: 相手の硬直　紫: 相手のダウン',
+    '緑: 発生（数 + 1 が発生のフレーム）　赤: 持続　青: 硬直　灰: 動ける　水色: ジャンプ　橙の枠: 先行入力　黄: 相手の硬直　紫: 相手のダウン　白: ヒットストップ（両者が止まる）',
+  cancelPrefix: 'キャンセル: ',
   dummyLabel: '相手',
   dummyHit: 'ヒット',
   dummyBlock: 'ガード',
@@ -326,7 +327,8 @@ const en: Messages = {
   frameMeterTitle: 'Frame meter',
   frameMeterMoves: (texts) => texts.join(' → '),
   frameMeterLegend:
-    'Green: startup (number + 1 is the startup frame)  Red: active  Blue: recovery  Gray: free  Cyan: jump  Orange frame: buffered input  Yellow: opponent stun  Purple: opponent knockdown',
+    'Green: startup (number + 1 is the startup frame)  Red: active  Blue: recovery  Gray: free  Cyan: jump  Orange frame: buffered input  Yellow: opponent stun  Purple: opponent knockdown  White: hitstop (both freeze)',
+  cancelPrefix: 'Cancel: ',
   dummyLabel: 'Opponent',
   dummyHit: 'Hit',
   dummyBlock: 'Block',

@@ -76,8 +76,8 @@ const cellOf = (state: StateKind, pressed: string[] = [], held: string[] = press
 });
 
 describe('定数と EMPTY_FRAME_METER', () => {
-  it('帯の上限 120・区切り 30・先頭の入力 15', () => {
-    expect(FRAME_METER_MAX).toBe(120);
+  it('帯の上限 240（第14段階で 120 から変更）・区切り 30・先頭の入力 15', () => {
+    expect(FRAME_METER_MAX).toBe(240);
     expect(FRAME_METER_BREAK).toBe(30);
     expect(FRAME_METER_LEAD).toBe(15);
   });
@@ -233,15 +233,16 @@ describe('stepFrameMeter (第11段階 受け入れ条件 1)', () => {
     expect(last(more).recording).toBe(false);
   });
 
-  it('120 マスを超えたら古いほうを捨て、starts の位置もずれる', () => {
-    // 20 フレームごとに 5LP を 8 回。積み上がる長さは 15 + 160 = 175 マス
+  it('240 マスを超えたら古いほうを捨て、starts の位置もずれる', () => {
+    // 第14段階で上限を 120 → 240 にしたので、サイクルを 8 → 14 回に増やした（捨てる分は同じ 55）。
+    // 20 フレームごとに 5LP を 14 回。積み上がる長さは 15 + 280 = 295 マス
     const cycle = [LP, ...rep(19, N)];
-    const inputs = [...rep(20, N), ...Array.from({ length: 8 }, () => cycle).flat()];
+    const inputs = [...rep(20, N), ...Array.from({ length: 14 }, () => cycle).flat()];
     const m = last(run(inputs));
     expect(m.cells).toHaveLength(FRAME_METER_MAX);
     expect(m.recording).toBe(true);
-    // 捨てた分は 175 - 120 = 55。残る技の開始は 15 + 20j のうち 55 以上のもの
-    expect(m.starts.map((s) => s.index)).toEqual([0, 20, 40, 60, 80, 100]);
+    // 捨てた分は 295 - 240 = 55。残る技の開始は 15 + 20j のうち 55 以上のもの
+    expect(m.starts.map((s) => s.index)).toEqual(Array.from({ length: 12 }, (_, i) => i * 20));
     for (const s of m.starts) {
       expect(m.cells[s.index]!.state).toBe('startup');
       expect(m.cells[s.index]!.pressed).toEqual(['LP']);
@@ -452,10 +453,10 @@ describe('lead・cut と labeledSegments（数字を付ける区間。第11段�
     expect(labeledSegments(m)[0]!.start).toBe(FRAME_METER_LEAD);
   });
 
-  it('120 マスを超えて古いほうを捨てたら cut が true になり、lead は捨てた分だけ減る（0 より下にはならない）', () => {
-    // 5LP を 2F すき間でつなぎ続けて、帯を 120 マスより長くする
+  it('240 マスを超えて古いほうを捨てたら cut が true になり、lead は捨てた分だけ減る（0 より下にはならない）', () => {
+    // 5LP を 2F すき間でつなぎ続けて、帯を 240 マスより長くする（第14段階で 120 → 240 にしたので 12 → 20 回に増やした）
     const chain: FrameInput[] = [...rep(20, N)];
-    for (let i = 0; i < 12; i++) chain.push(LP, ...rep(14, N));
+    for (let i = 0; i < 20; i++) chain.push(LP, ...rep(14, N));
     const ms = run(chain);
     const firstCut = ms.findIndex((m) => m.cut);
     expect(firstCut).toBeGreaterThan(0);
@@ -467,7 +468,7 @@ describe('lead・cut と labeledSegments（数字を付ける区間。第11段�
 
   it('cut で lead が 0 のとき、途中で切れた先頭の区間には数字を付けない', () => {
     const chain: FrameInput[] = [...rep(20, N)];
-    for (let i = 0; i < 12; i++) chain.push(LP, ...rep(14, N));
+    for (let i = 0; i < 20; i++) chain.push(LP, ...rep(14, N));
     const m = last(run(chain));
     expect(m.cut).toBe(true);
     expect(m.lead).toBe(0);
@@ -509,9 +510,9 @@ describe('syncMoveTexts（帯の技と、技の文の対応。第11段階のレ�
     expect(texts).toEqual(['T:2LP']);
   });
 
-  it('120 マスを超えて古い技が帯から外れたら、その文も捨てる（数と順が starts と同じ）', () => {
+  it('240 マスを超えて古い技が帯から外れたら、その文も捨てる（数と順が starts と同じ。第14段階で 12 → 20 回に増やした）', () => {
     const chain: FrameInput[] = [...rep(20, N)];
-    for (let i = 0; i < 12; i++) chain.push(i % 2 === 0 ? LP : { dir: 2, buttons: ['LP'] }, ...rep(14, N));
+    for (let i = 0; i < 20; i++) chain.push(i % 2 === 0 ? LP : { dir: 2, buttons: ['LP'] }, ...rep(14, N));
     const ms = run(chain);
     let texts: readonly string[] = [];
     let prev = EMPTY_FRAME_METER;
@@ -558,30 +559,43 @@ const advOf = (ms: FrameMeterState[]) => ms.map((m) => m.advantage);
 const HK2: FrameInput = { dir: 2, buttons: ['HK'] };
 const S = 20; // 技を押す前の free の長さ。以下の「フレーム n」は、この S を足した入力の位置
 
-describe('stepFrameMeter: 相手の段・contact (第13段階 受け入れ条件 4)', () => {
-  it('5LP ヒット: 相手の段は、持続の 1 フレーム目（技の 3）から 15 マス hitstun。ほかは付かない', () => {
+describe('stepFrameMeter: 相手の段・contact (第13段階 受け入れ条件 4。第14段階でヒットストップの分だけ直した)', () => {
+  it('5LP ヒット: 相手の段は、持続の 1 フレーム目（技の 3）から hitstun 1・hitstop 9・hitstun 14。ほかは付かない', () => {
     // 帯の先頭 15 マスは入力だけの部分。技は帯の 15 マス目から。当たるのは技の 3 フレーム目 = 帯の 18 マス目
     const m = last(runVs([...rep(S, N), LP, ...rep(40, N)], 'hit'));
     const opp = m.cells.map((c) => c.opponent);
     const t = FRAME_METER_LEAD + 3;
     expect(opp.slice(0, t).every((o) => o === undefined)).toBe(true);
-    expect(opp.slice(t, t + 15)).toEqual(Array.from({ length: 15 }, () => 'hitstun'));
-    expect(opp.slice(t + 15).every((o) => o === undefined)).toBe(true);
+    expect(opp.slice(t, t + 24)).toEqual([
+      'hitstun',
+      ...Array.from({ length: 9 }, () => 'hitstop'),
+      ...Array.from({ length: 14 }, () => 'hitstun'),
+    ]);
+    expect(opp.slice(t + 24).every((o) => o === undefined)).toBe(true);
   });
 
-  it('5LP ガード: blockstun 8 マス', () => {
+  it('5LP ガード: blockstun 1・hitstop 9・blockstun 7', () => {
     const m = last(runVs([...rep(S, N), LP, ...rep(40, N)], 'block'));
     const t = FRAME_METER_LEAD + 3;
-    expect(m.cells.map((c) => c.opponent).slice(t, t + 9)).toEqual([...Array.from({ length: 8 }, () => 'blockstun'), undefined]);
+    expect(m.cells.map((c) => c.opponent).slice(t, t + 18)).toEqual([
+      'blockstun',
+      ...Array.from({ length: 9 }, () => 'hitstop'),
+      ...Array.from({ length: 7 }, () => 'blockstun'),
+      undefined,
+    ]);
   });
 
-  it('2HK ヒット: down が 65 マス（技の 8 から。帯は 15 + 73 = 88 マス以上）', () => {
-    const m = last(runVs([...rep(S, N), HK2, ...rep(80, N)], 'hit'));
+  it('2HK ヒット: down 1・hitstop 13・down 64（技の 8 から合計 78 マス）', () => {
+    const m = last(runVs([...rep(S, N), HK2, ...rep(100, N)], 'hit'));
     const t = FRAME_METER_LEAD + 8;
     const opp = m.cells.map((c) => c.opponent);
-    expect(opp.slice(t, t + 65).every((o) => o === 'down')).toBe(true);
+    expect(opp.slice(t, t + 78)).toEqual([
+      'down',
+      ...Array.from({ length: 13 }, () => 'hitstop'),
+      ...Array.from({ length: 64 }, () => 'down'),
+    ]);
     expect(opp[t - 1]).toBeUndefined();
-    expect(opp[t + 65]).toBeUndefined();
+    expect(opp[t + 78]).toBeUndefined();
   });
 
   it('当たったフレームのマスにだけ contact が付く。技の starts の最後にも同じ contact が付く', () => {
@@ -643,59 +657,59 @@ describe('stepFrameMeter: 相手の段・contact (第13段階 受け入れ条件
   });
 });
 
-describe('stepFrameMeter: advantage (第13段階 受け入れ条件 4)', () => {
+describe('stepFrameMeter: advantage (第13段階 受け入れ条件 4。第14段階でヒットストップの分だけ直した)', () => {
   it('帯が始まる前・新しい帯では null', () => {
     expect(EMPTY_FRAME_METER.advantage).toBeNull();
     expect(last(runVs([...rep(S, N), LP], 'hit')).advantage).toBeNull();
   });
 
-  it('キャミィ 5LP ヒット: キャラが動けるのは 3+3+7 = 13、相手が動けるのは 3+15 = 18。18 - 13 = +5（18 になって決まる）', () => {
-    const ms = runVs([...rep(S, N), LP, ...rep(25, N)], 'hit');
-    expect(ms[S + 17]!.advantage).toBeNull(); // 相手がまだ動けない
-    expect(ms[S + 18]!.advantage).toBe(5);
+  it('キャミィ 5LP ヒット: キャラが動けるのは 3+3+7+ヒットストップ 9 = 22、相手が動けるのは 3+15+9 = 27。27 - 22 = +5（27 になって決まる）', () => {
+    const ms = runVs([...rep(S, N), LP, ...rep(40, N)], 'hit');
+    expect(ms[S + 26]!.advantage).toBeNull(); // 相手がまだ動けない
+    expect(ms[S + 27]!.advantage).toBe(5);
     expect(last(ms).advantage).toBe(5);
     expect(last(ms).recording).toBe(true);
   });
 
-  it('キャミィ 5LP ガード: 相手 3+8 = 11、キャラ 13。11 - 13 = -2（キャラが 13 に動けて決まる）', () => {
-    const ms = runVs([...rep(S, N), LP, ...rep(25, N)], 'block');
-    expect(ms[S + 12]!.advantage).toBeNull();
-    expect(ms[S + 13]!.advantage).toBe(-2);
+  it('キャミィ 5LP ガード: 相手 3+8+9 = 20、キャラ 22。20 - 22 = -2（キャラが 22 に動けて決まる）', () => {
+    const ms = runVs([...rep(S, N), LP, ...rep(40, N)], 'block');
+    expect(ms[S + 21]!.advantage).toBeNull();
+    expect(ms[S + 22]!.advantage).toBe(-2);
     expect(last(ms).advantage).toBe(-2);
   });
 
-  it('キャミィ 2HK ヒット: キャラ 8+3+24 = 35、相手 8+65 = 73。73 - 35 = +38', () => {
-    const ms = runVs([...rep(S, N), HK2, ...rep(90, N)], 'hit');
-    expect(ms[S + 72]!.advantage).toBeNull();
-    expect(ms[S + 73]!.advantage).toBe(38);
+  it('キャミィ 2HK ヒット: キャラ 8+3+24+13 = 48、相手 8+65+13 = 86。86 - 48 = +38', () => {
+    const ms = runVs([...rep(S, N), HK2, ...rep(100, N)], 'hit');
+    expect(ms[S + 85]!.advantage).toBeNull();
+    expect(ms[S + 86]!.advantage).toBe(38);
   });
 
-  it('キャミィ 623LK ガード: 技は入力の 2 番目（3 のフレーム）から。キャラ 4+12+40 = 56、相手 4+16 = 20。20 - 56 = -36', () => {
+  it('キャミィ 623LK ガード: 技は入力の 2 番目（3 のフレーム）から。キャラ 4+12+40+ヒットストップ 12 = 68、相手 4+16+12 = 32。32 - 68 = -36', () => {
     // 6, 2, 3+LK の 3 フレーム目で出る。start = S + 2
     const inputs = [...rep(S, N), ...(([6, 2] as const).map((d) => ({ dir: d, buttons: [] })) as FrameInput[]), { dir: 3, buttons: ['LK'] } as FrameInput, ...rep(70, N)];
     const ms = runVs(inputs, 'block');
     const start = S + 2;
-    expect(ms[start + 55]!.advantage).toBeNull();
-    expect(ms[start + 56]!.advantage).toBe(-36);
+    expect(ms[start + 67]!.advantage).toBeNull();
+    expect(ms[start + 68]!.advantage).toBe(-36);
   });
 
-  it('ブリジット 5S ヒット: キャラ 6+6+13 = 25、相手 6+32 = 38（L = 13+6+13 = 32）。38 - 25 = +13', () => {
+  it('ブリジット 5S ヒット: キャラ 6+6+13+ヒットストップ 14 = 39、相手 6+32+14 = 52（L = 13+6+13 = 32）。52 - 39 = +13', () => {
     const S5: FrameInput = { dir: 5, buttons: ['S'] };
-    const ms = runVs([...rep(S, N), S5, ...rep(50, N)], 'hit', { c: bridget, rules: PROFILES.ggst });
-    expect(ms[S + 37]!.advantage).toBeNull();
-    expect(ms[S + 38]!.advantage).toBe(13);
+    const ms = runVs([...rep(S, N), S5, ...rep(70, N)], 'hit', { c: bridget, rules: PROFILES.ggst });
+    expect(ms[S + 51]!.advantage).toBeNull();
+    expect(ms[S + 52]!.advantage).toBe(13);
   });
 
   it('新しく当たっても、その技の分が決まるまで前の値のまま。決まったら新しい値', () => {
-    // 5LP（0）ヒット → +5 が 18 で決まる。20 に 2HK: 当たるのは 28、キャラ 20+35 = 55 から動ける、相手は 28+65 = 93 まで down。
-    // 93 で +38
+    // 5LP（0）ヒット → +5 が 27 で決まる。20 に押した 2HK は先行入力（5LP の先にない）で、動ける 22 から出る。
+    // 当たるのは 30（ヒットストップ 13）、キャラ 22+35+13 = 70 から動ける、相手は 30+65+13 = 108 まで down。108 で +38
     const inputs = [...rep(S, N), LP, ...rep(19, N), HK2, ...rep(90, N)];
     const ms = runVs(inputs, 'hit');
-    expect(ms[S + 17]!.advantage).toBeNull();
-    expect(ms[S + 18]!.advantage).toBe(5);
-    expect(ms[S + 28]!.advantage).toBe(5); // 2HK が当たったフレーム
-    expect(ms[S + 92]!.advantage).toBe(5);
-    expect(ms[S + 93]!.advantage).toBe(38);
+    expect(ms[S + 26]!.advantage).toBeNull();
+    expect(ms[S + 27]!.advantage).toBe(5);
+    expect(ms[S + 30]!.advantage).toBe(5); // 2HK が当たったフレーム
+    expect(ms[S + 107]!.advantage).toBe(5);
+    expect(ms[S + 108]!.advantage).toBe(38);
   });
 
   it('止まって新しい帯が始まったら null に戻る', () => {
@@ -706,14 +720,14 @@ describe('stepFrameMeter: advantage (第13段階 受け入れ条件 4)', () => {
   });
 });
 
-describe('stepFrameMeter: 区切り (第13段階 受け入れ条件 6)', () => {
-  it('相手が硬直の間は区切りの数え始めにならない: 5LP ヒットは、相手が 18 で free になってから 30 フレーム目に止まる', () => {
-    // 相手なしなら、キャラが free になる 13 から 30 フレーム目（13+29 = 42）で止まる。
-    // 相手ありは、キャラも相手も free になる 18 から（18+29 = 47）
-    const ms = runVs([...rep(S, N), LP, ...rep(60, N)], 'hit');
-    expect(ms[S + 42]!.recording).toBe(true);
-    expect(ms[S + 46]!.recording).toBe(true);
-    expect(ms[S + 47]!.recording).toBe(false);
+describe('stepFrameMeter: 区切り (第13段階 受け入れ条件 6。第14段階でヒットストップの分だけ直した)', () => {
+  it('相手が硬直の間は区切りの数え始めにならない: 5LP ヒットは、相手が 27 で free になってから 30 フレーム目に止まる', () => {
+    // 相手なしなら、キャラが free になる 22 から 30 フレーム目（22+29 = 51）で止まる。
+    // 相手ありは、キャラも相手も free になる 27 から（27+29 = 56）
+    const ms = runVs([...rep(S, N), LP, ...rep(70, N)], 'hit');
+    expect(ms[S + 51]!.recording).toBe(true);
+    expect(ms[S + 55]!.recording).toBe(true);
+    expect(ms[S + 56]!.recording).toBe(false);
   });
 
   it('相手がいないとき（5 つ目の引数なし）は、今までどおり 42 で止まる', () => {
@@ -722,18 +736,44 @@ describe('stepFrameMeter: 区切り (第13段階 受け入れ条件 6)', () => {
     expect(ms[S + 42]!.recording).toBe(false);
   });
 
-  it('2HK のダウン中（8〜72）は、キャラが 35 から free でも止まらない。相手が 73 で free になって 30 フレーム目（102）に止まる', () => {
-    const ms = runVs([...rep(S, N), HK2, ...rep(110, N)], 'hit');
-    expect(ms[S + 35 + 30]!.recording).toBe(true); // 相手なしなら止まる位置（35+29 = 64 を過ぎている）
-    expect(ms[S + 72]!.recording).toBe(true);
-    expect(ms[S + 101]!.recording).toBe(true);
-    expect(ms[S + 102]!.recording).toBe(false);
+  it('2HK のダウン中（8〜85）は、キャラが 48 から free でも止まらない。相手が 86 で free になって 30 フレーム目（115）に止まる', () => {
+    const ms = runVs([...rep(S, N), HK2, ...rep(130, N)], 'hit');
+    expect(ms[S + 48 + 30]!.recording).toBe(true); // 相手なしなら止まる位置（48+29 = 77 を過ぎている）
+    expect(ms[S + 85]!.recording).toBe(true);
+    expect(ms[S + 114]!.recording).toBe(true);
+    expect(ms[S + 115]!.recording).toBe(false);
   });
 
   it('ボタンを押すと数えが戻るのは今までどおり（相手が free でも）', () => {
-    // 5LP ヒット後、相手が free になって 10 フレーム経った 28 に LP を押す
+    // 5LP ヒット後、相手が free になった 27 の次の 28 に LP を押す（第14段階でヒットストップの分、相手が free になるのが遅くなった）
     const ms = runVs([...rep(S, N), LP, ...rep(27, N), LP, ...rep(5, N)], 'hit');
     expect(ms[S + 28]!.freeRun).toBe(0);
     expect(last(ms).recording).toBe(true);
+  });
+});
+
+describe('meterKindOf: ヒットストップ (第14段階 受け入れ条件 10)', () => {
+  it('frozen なら、持続の途中でも hitstop', () => {
+    expect(meterKindOf({ ...at('active', lp), frozen: true })).toBe('hitstop');
+    expect(meterKindOf({ ...at('startup', lp), frozen: true })).toBe('hitstop');
+  });
+
+  it('frozen がなければ今までどおり（持続は active）', () => {
+    expect(meterKindOf(at('active', lp))).toBe('active');
+    expect(meterKindOf(at('recovery', lp))).toBe('recovery');
+  });
+});
+
+describe('stepFrameMeter: cancel の印 (第14段階 受け入れ条件 10)', () => {
+  it('キャンセルで始まった技（canceled: true）のマスと MoveStart に cancel: true が付く', () => {
+    const prev: FighterState = { ...at('active', lp), contact: true, hitstop: 0 };
+    const started: FighterState = { ...at('startup', lp2), canceled: true };
+    const m0 = stepFrameMeter(EMPTY_FRAME_METER, INITIAL_FIGHTER, at('startup', lp), [LP]);
+    const m1 = stepFrameMeter(m0, prev, started, [LP, { dir: 2, buttons: ['LP'] }]);
+    const cell = last(m1.cells);
+    expect(cell.moveStart).toBe(true);
+    expect(cell.cancel).toBe(true);
+    expect(last(m1.starts).cancel).toBe(true);
+    expect(m1.starts[0]!.cancel).toBeUndefined();
   });
 });

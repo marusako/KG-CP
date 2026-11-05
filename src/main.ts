@@ -421,7 +421,7 @@ function refreshPad(): void {
   }
 }
 
-/** 技の文の後ろにつける結果。当たったら当たり方、いまの切り替えで反応のデータがなければその知らせ、そうでなければ空 */
+/** 技の文の後ろにつける結果（キャンセルで出した技の頭には、updateMoveTexts が cancelPrefix を付ける）。当たったら当たり方、いまの切り替えで反応のデータがなければその知らせ、そうでなければ空 */
 function resultText(start: FrameMeterState['starts'][number]): string {
   if (start.contact !== undefined) return ` / ${msg().contactText(start.contact)}`;
   return contactReaction(start.move, settings.dummyMode) === null ? ` / ${msg().noReactionData}` : '';
@@ -439,7 +439,10 @@ function updateMoveTexts(before: FrameMeterState): void {
   );
   if (texts === moveTexts && frameMeter.starts === before.starts) return;
   moveTexts = texts;
-  movesLine = msg().frameMeterMoves(texts.map((t, i) => t + resultText(frameMeter.starts[i] as FrameMeterState['starts'][number])));
+  movesLine = msg().frameMeterMoves(texts.map((t, i) => {
+    const start = frameMeter.starts[i] as FrameMeterState['starts'][number];
+    return (start.cancel === true ? msg().cancelPrefix : '') + t + resultText(start);
+  }));
 }
 
 function stepFrame(end: number): void {

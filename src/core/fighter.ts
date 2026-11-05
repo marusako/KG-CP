@@ -113,10 +113,21 @@ export interface FighterState {
   frame: number;
   /** 出している技（startup・active・recovery のときだけ） */
   move: MoveFrames | null;
-  /** 動けない間に押された技（先行入力）。動けるようになった最初のフレームで出す */
+  /**
+   * 動けない間に押された技（先行入力）。動けるようになった最初のフレームで出す。
+   * キャンセル先なら、ヒットストップ中は予約（cancelTo）にし、止まり終わったあとの窓ではそのフレームから出す
+   */
   buffered: { move: MoveFrames; age: number } | null;
   /** いまの技が相手に当たった（付けるのは stepDummy）。新しい技を出す・動けるようになると消える。当たったあとの硬直の長さに使う */
   contact?: true;
+  /** 当たったあと、このあと止まるフレーム数。stepDummy が当たったフレームに技の hitstop を入れる */
+  hitstop?: number;
+  /** このフレームはヒットストップで止まっていた（stepFighter が付ける。止まっていないフレームでは付けない） */
+  frozen?: true;
+  /** ヒットストップ中に予約したキャンセル先の技。止まり終わった最初のフレームで出す */
+  cancelTo?: MoveFrames;
+  /** いまの技はキャンセルで出した（新しい技を出す・動けるようになると消える） */
+  canceled?: true;
 }
 
 export const INITIAL_FIGHTER: FighterState = {
@@ -141,14 +152,27 @@ function moveLength(move: MoveFrames, phase: 'startup' | 'active' | 'recovery', 
   return contact ? (move.contactRecovery ?? move.recovery) : move.recovery;
 }
 
-/** contact の印を外した状態 */
-function withoutContact(state: FighterState): FighterState {
-  const { contact: _contact, ...rest } = state;
+/** 当たり・ヒットストップ・キャンセルの印（contact・hitstop・frozen・cancelTo・canceled）を外した状態 */
+function withoutHitMarks(state: FighterState): FighterState {
+  const { contact: _contact, hitstop: _hitstop, frozen: _frozen, cancelTo: _cancelTo, canceled: _canceled, ...rest } = state;
   return rest;
 }
 
-function startMove(state: FighterState, move: MoveFrames): FighterState {
-  return { ...withoutContact(state), phase: 'startup', frame: 0, move, buffered: null };
+/** 新しい技を出す。キャンセルで出したときだけ canceled: true を付ける */
+function startMove(state: FighterState, move: MoveFrames, canceled = false): FighterState {
+  return {
+    ...withoutHitMarks(state),
+    phase: 'startup',
+    frame: 0,
+    move,
+    buffered: null,
+    ...(canceled ? { canceled: true as const } : {}),
+  };
+}
+
+/** move が、いまの技（state.move）のキャンセル先か */
+function cancelsTo(state: FighterState, move: MoveFrames | undefined): move is MoveFrames {
+  return move !== undefined && (state.move?.cancels?.includes(move.input) ?? false);
 }
 
 /** 動ける状態のとき、方向から次の状態を決める（同じなら state をそのまま返す） */
@@ -172,6 +196,10 @@ function freeStep(state: FighterState, dir: number): FighterState {
  * - 動ける（idle・crouch・walk）とき: 技が選ばれたら startup の 0 フレーム目へ。そうでなければ方向で idle・crouch・walk・prejump
  * - 技の途中: startup → active → recovery と進み、終わったら動ける状態へ
  * - 技の途中や着地中に選ばれた技は buffered に入れる。動けるようになるまでに age が inputBuffer を超えたら捨てる
+ * - ヒットストップ（state.hitstop が 1 以上）: 段階・フレーム・技は変えず、frozen を付けて hitstop を 1 減らす。
+ *   先行入力は同じように進め、残っているものがキャンセル先（move.cancels）なら cancelTo に予約する。
+ *   止まり終わった最初のフレームで、予約があればその技を出す（canceled）
+ * - 当たったあと（contact）、持続か硬直の 0 フレーム目になるフレームで、選ばれた技か先行入力がキャンセル先ならそのフレームから出す
  * - ジャンプ: prejump → air → landing。空中ではボタンを無視する（空中技は 2 段目）
  * idle・crouch のままなら同じ state を返す（描き直しを省くため）
  */
@@ -188,15 +216,41 @@ export function stepFighter(
   // 空中・跳ぶ前はボタンを無視する
   const canAct = state.phase !== 'prejump' && state.phase !== 'air';
   const selected = fighter !== null && canAct ? selectMove(history, fighter.data, fighter.character, rules) : null;
+  // キャンセル先かを調べる（cancelsTo は型ガードなので、null を undefined にそろえた変数で渡す）
+  const fresh = selected ?? undefined;
 
   if (!isBusy(state.phase)) {
     return selected !== null ? startMove(state, selected) : freeStep(state, dir);
+  }
+
+  // 止まっていたフレームの印は引き継がない
+  if (state.frozen === true) {
+    const { frozen: _frozen, ...rest } = state;
+    state = rest;
   }
 
   // 先行入力は 1 フレームごとに古くなる。新しく選ばれたものは古いものに替える
   let buffered = state.buffered === null ? null : { move: state.buffered.move, age: state.buffered.age + 1 };
   if (buffered !== null && buffered.age > inputBuffer) buffered = null;
   if (selected !== null) buffered = { move: selected, age: 0 };
+
+  // ヒットストップ中: 止まる。キャンセル先は、新しく押したものを優先して予約にする
+  if (state.hitstop !== undefined && state.hitstop >= 1) {
+    const { hitstop: _hitstop, ...rest } = state;
+    const left = state.hitstop - 1;
+    const queued = buffered?.move;
+    const reserve = cancelsTo(state, fresh) ? fresh : state.cancelTo ?? (cancelsTo(state, queued) ? queued : undefined);
+    return {
+      ...rest,
+      frozen: true,
+      buffered,
+      ...(left >= 1 ? { hitstop: left } : {}),
+      ...(reserve ? { cancelTo: reserve } : {}),
+    };
+  }
+  if (state.cancelTo !== undefined) {
+    return startMove(state, cancelsTo(state, fresh) ? fresh : state.cancelTo, true);
+  }
 
   const frame = state.frame + 1;
   let next: FighterState | null = null;
@@ -224,11 +278,17 @@ export function stepFighter(
       }
     }
   }
-  if (next !== null) return { ...next, buffered };
+  if (next !== null) {
+    // 当たったあとの、持続か硬直の 0 フレーム目: キャンセル先が選ばれていれば（先行入力に残っていれば）そこから出す
+    const inWindow = next.contact === true && (next.phase === 'active' || (next.phase === 'recovery' && next.frame === 0));
+    const queued = buffered?.move;
+    if (inWindow && cancelsTo(state, queued)) return startMove(state, queued, true);
+    return { ...next, buffered };
+  }
 
   // 動けるようになった最初のフレーム。先行入力があれば、そのフレームが startup の 0 フレーム目
   if (buffered !== null) return startMove(state, buffered.move);
-  return freeStep({ ...withoutContact(state), phase: 'idle', frame: 0, move: null, buffered: null }, dir);
+  return freeStep({ ...withoutHitMarks(state), phase: 'idle', frame: 0, move: null, buffered: null }, dir);
 }
 
 /**

@@ -377,3 +377,17 @@ describe('相手のダミーの文 (第13段階)', () => {
     expect(msg('ja').frameMeterLegend).toContain('緑: 発生');
   });
 });
+
+describe('第14段階: キャンセルの文・凡例', () => {
+  it('cancelPrefix は「キャンセル: 」「Cancel: 」', () => {
+    expect(msg('ja').cancelPrefix).toBe('キャンセル: ');
+    expect(msg('en').cancelPrefix).toBe('Cancel: ');
+  });
+
+  it('凡例に、白のヒットストップが足される。今までの説明は残る', () => {
+    expect(msg('ja').frameMeterLegend).toContain('白: ヒットストップ（両者が止まる）');
+    expect(msg('en').frameMeterLegend).toContain('White: hitstop (both freeze)');
+    expect(msg('ja').frameMeterLegend).toContain('緑: 発生');
+    expect(msg('ja').frameMeterLegend).toContain('黄: 相手の硬直　紫: 相手のダウン');
+  });
+});

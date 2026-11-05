@@ -246,3 +246,119 @@ describe('contactReaction (第13段階 受け入れ条件 1)', () => {
     expect(contactReaction({ input: 'x', startup: 5, active: 2, recovery: 10 }, 'block')).toBeNull();
   });
 });
+
+// ---- 第14段階 受け入れ条件 1: hitstop・cancels ----
+
+const CAMMY_CHAIN = ['5LP', '2LP', '2LK'];
+const CAMMY_SPECIAL = ['236LK', '236MK', '236HK', '623LK', '623MK', '623HK', '214LP', '214MP', '214HP'];
+const CAMMY_SA = ['236236K', '214214P', '236236P'];
+const BRIDGET_SPECIAL = ['236K', '236S', '236HS', '623P', '63214P'];
+const BRIDGET_SA = ['632146S'];
+
+/** [入力, ヒットストップ（なしは null）, キャンセル先（なしは null）] */
+type CancelRow = [string, number | null, readonly string[] | null];
+
+const CAMMY_CANCELS: CancelRow[] = [
+  ['5LP', 9, [...CAMMY_CHAIN, ...CAMMY_SPECIAL, ...CAMMY_SA]],
+  ['5MP', 11, null],
+  ['5HP', 13, [...CAMMY_SPECIAL, ...CAMMY_SA]], // tc（ターゲットコンボ）は対象外
+  ['5LK', 9, [...CAMMY_SPECIAL, ...CAMMY_SA]],
+  ['5MK', 11, null],
+  ['5HK', 13, null],
+  ['2LP', 9, [...CAMMY_CHAIN, ...CAMMY_SPECIAL, ...CAMMY_SA]],
+  ['2MP', 11, [...CAMMY_SPECIAL, ...CAMMY_SA]],
+  ['2HP', 13, null],
+  ['2LK', 9, CAMMY_CHAIN],
+  ['2MK', 9, [...CAMMY_SPECIAL, ...CAMMY_SA]],
+  ['2HK', 13, null],
+  ['236LK', null, null], // 反応のデータがなく当たらない
+  ['236MK', null, null],
+  ['236HK', null, ['236236P']], // 当たらないので、今は出せない
+  ['623LK', 12, ['236236P']], // FAT は 12(13)。括弧の外
+  ['623MK', 12, ['236236P']],
+  ['623HK', 12, ['236236P']],
+  ['214LP', 13, ['236236P']],
+  ['214MP', 13, ['236236P']],
+  ['214HP', 13, ['236236P']],
+  ['236236K', 5, null], // FAT は 5*5*5*5*13。1 段目
+  ['214214P', 16, null],
+  ['236236P', 20, null],
+];
+
+const BRIDGET_CANCELS: CancelRow[] = [
+  ['5P', 11, ['5P', '2P', ...BRIDGET_SPECIAL, ...BRIDGET_SA]],
+  ['5K', 12, ['5D', '2D', ...BRIDGET_SPECIAL, ...BRIDGET_SA]], // 12 は推測
+  ['5S', 14, ['2S', '5HS', '2HS', '5D', '2D', ...BRIDGET_SPECIAL, ...BRIDGET_SA]], // 14 は推測
+  ['5HS', 14, [...BRIDGET_SPECIAL, ...BRIDGET_SA]],
+  ['5D', 13, null],
+  ['2P', 11, ['5P', '2P', ...BRIDGET_SPECIAL, ...BRIDGET_SA]],
+  ['2K', 12, ['5D', '2D', ...BRIDGET_SPECIAL, ...BRIDGET_SA]],
+  ['2S', 13, ['5HS', '2HS', ...BRIDGET_SPECIAL, ...BRIDGET_SA]],
+  ['2HS', 14, [...BRIDGET_SPECIAL, ...BRIDGET_SA]],
+  ['2D', 13, [...BRIDGET_SPECIAL, ...BRIDGET_SA]],
+  ['236K', 13, null],
+  ['236S', null, null], // 反応のデータがなく当たらない
+  ['236HS', null, null],
+  ['623P', 13, null],
+  ['63214P', null, null],
+  ['632146S', 13, null],
+];
+
+describe('hitstop・cancels (第14段階 受け入れ条件 1)', () => {
+  for (const [cid, rows] of [['cammy', CAMMY_CANCELS], ['bridget', BRIDGET_CANCELS]] as const) {
+    describe(cid, () => {
+      it('表はそのキャラの全部の技を 1 回ずつ覆っている', () => {
+        expect(rows.map((r) => r[0]).sort()).toEqual(fighterDataFor(cid)!.moves.map((m) => m.input).sort());
+      });
+
+      for (const [input, hitstop, cancels] of rows) {
+        it(`${input}: hitstop ${hitstop ?? 'なし'} / cancels ${cancels ? cancels.length + ' 個' : 'なし'}`, () => {
+          const m = moveOf(cid, input);
+          if (hitstop === null) expect(m.hitstop).toBeUndefined();
+          else expect(m.hitstop).toBe(hitstop);
+          if (cancels === null) {
+            expect(m.cancels).toBeUndefined();
+          } else {
+            expect([...(m.cancels ?? [])].sort()).toEqual([...cancels].sort());
+          }
+        });
+      }
+
+      it('反応のデータ（onHit か onBlock）がある技は、すべて hitstop が 1 以上', () => {
+        for (const m of fighterDataFor(cid)!.moves) {
+          if (contactReaction(m, 'hit') !== null || contactReaction(m, 'block') !== null) {
+            expect(m.hitstop, `${cid} ${m.input}`).toBeGreaterThanOrEqual(1);
+          }
+        }
+      });
+
+      it('cancels の入力は、すべて同じキャラの技にある', () => {
+        const inputs = new Set(fighterDataFor(cid)!.moves.map((m) => m.input));
+        for (const m of fighterDataFor(cid)!.moves) {
+          for (const c of m.cancels ?? []) expect(inputs.has(c), `${cid} ${m.input} → ${c}`).toBe(true);
+        }
+      });
+    });
+  }
+
+  describe('キャンセルの猶予: 1 + hitstop + active が FAT の hcWinSpCa と同じ（FAT の値をここに書く）', () => {
+    // [入力, FAT の hcWinSpCa]
+    const FAT: [string, number][] = [
+      ['5LP', 13],
+      ['5HP', 17],
+      ['5LK', 13],
+      ['2LP', 12],
+      ['2MP', 15],
+      ['2MK', 13],
+      ['214LP', 18],
+      ['214MP', 18],
+      ['214HP', 18],
+    ];
+    for (const [input, win] of FAT) {
+      it(`${input}: ${win}`, () => {
+        const m = moveOf('cammy', input);
+        expect(1 + m.hitstop! + m.active).toBe(win);
+      });
+    }
+  });
+});

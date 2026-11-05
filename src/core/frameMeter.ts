@@ -5,10 +5,11 @@ import { meterCells } from './inputMeter';
 import type { Direction, FrameInput } from './types';
 
 /** 上の段のマスの種類 */
-export type StateKind = 'free' | 'startup' | 'active' | 'recovery' | 'jump';
+export type StateKind = 'free' | 'startup' | 'active' | 'recovery' | 'jump' | 'hitstop';
 
-/** 状態からマスの種類。idle・crouch・walk は 'free'、prejump・air・landing は 'jump' */
+/** 状態からマスの種類。ヒットストップで止まっているフレームは 'hitstop'。idle・crouch・walk は 'free'、prejump・air・landing は 'jump' */
 export function meterKindOf(state: FighterState): StateKind {
+  if (state.frozen === true) return 'hitstop';
   switch (state.phase) {
     case 'startup':
     case 'active':
@@ -32,8 +33,10 @@ export interface FrameMeterCell {
   held: readonly string[];
   /** このフレームで技が始まった（技を出したボタンのマスは、先行入力にしないための印。始まったマスだけ true） */
   moveStart?: true;
-  /** このフレームの相手の状態（相手が free のときは付けない） */
-  opponent?: 'hitstun' | 'blockstun' | 'down';
+  /** このフレームで、キャンセルで技が始まった */
+  cancel?: true;
+  /** このフレームの相手の状態（相手が free のときは付けない。'hitstop' はキャラと一緒に止まっている） */
+  opponent?: 'hitstun' | 'blockstun' | 'down' | 'hitstop';
   /** このフレームで技が当たった */
   contact?: Contact;
 }
@@ -43,6 +46,8 @@ export interface MoveStart {
   index: number;
   move: MoveFrames;
   contact?: Contact;
+  /** キャンセルで始まった技 */
+  cancel?: true;
 }
 
 export interface FrameMeterState {
@@ -65,7 +70,7 @@ export interface FrameMeterState {
 }
 
 /** 帯の長さの上限。超えたら古いほうから捨てる */
-export const FRAME_METER_MAX = 120;
+export const FRAME_METER_MAX = 240;
 /** 動ける時間がこれだけ続いたら区切る */
 export const FRAME_METER_BREAK = 30;
 /** 帯を始めるとき、その前の入力を何フレーム分つけるか */
@@ -90,15 +95,22 @@ function pressedNow(history: readonly FrameInput[]): boolean {
 }
 
 /**
- * 最後に当たった技（contact が付いた最後のマス）の有利フレーム。当たったあと、キャラが持続・硬直でなくなった最初のマスと、
- * 相手が free になった最初のマスがどちらも来たら、相手の方 − キャラの方。どちらかがまだなら null
+ * 最後に当たった技（contact が付いた最後のマス）の有利フレーム。当たったあと、キャラが動けるようになった最初のマスと、
+ * 相手が free になった最初のマスがどちらも来たら、相手の方 − キャラの方。どちらかがまだなら null。
+ * キャラが動けるようになったマスは、段が 発生前・持続・硬直・ヒットストップ のどれでもないマス、または
+ * キャンセルでない技の始まりのマス（キャンセルした所では決めず、キャンセルで出した技の終わりまで待つ。
+ * 相手の止まっているマスは free ではない）
  */
 function advantageOf(cells: readonly FrameMeterCell[]): number | null {
   let hit = cells.length - 1;
   while (hit >= 0 && (cells[hit] as FrameMeterCell).contact === undefined) hit--;
   if (hit < 0) return null;
   const after = cells.slice(hit + 1);
-  const mine = after.findIndex((c) => c.state !== 'active' && c.state !== 'recovery');
+  const mine = after.findIndex(
+    (c) =>
+      (c.state !== 'startup' && c.state !== 'active' && c.state !== 'recovery' && c.state !== 'hitstop') ||
+      (c.moveStart === true && c.cancel !== true),
+  );
   const theirs = after.findIndex((c) => c.opponent === undefined);
   return mine < 0 || theirs < 0 ? null : theirs - mine;
 }
@@ -109,6 +121,7 @@ function advantageOf(cells: readonly FrameMeterCell[]): number | null {
  *   FRAME_METER_LEAD フレームまでつける）。どちらでもなければ同じ state を返す（描き直しを省くため）
  * - 積んでいるとき: いまのフレームのマスを足す。キャラが 'free'・ボタンを押していない・相手も free の状態が
  *   FRAME_METER_BREAK フレーム続いたら止め、その続きの分は帯から取り除く
+ * - キャラが止まっている（frozen）フレームは、キャラの段も相手の段も 'hitstop'。キャンセルで始まった技のマスと starts には cancel を付ける
  * - opponent は、このフレームの相手（stepDummy の結果）。省いたら相手はずっと free。当たったら、そのマスと
  *   帯の starts の最後（当たった技）に contact を付け、advantage を更新する
  */
@@ -123,7 +136,9 @@ export function stepFrameMeter(
   if (!state.recording && !started && !pressedNow(history)) return state;
 
   const kind = meterKindOf(next);
-  const stun = opponent === undefined || opponent.dummy.phase === 'free' ? null : opponent.dummy.phase;
+  // キャラが止まっているフレームは、相手も止まっている
+  const stun =
+    next.frozen === true ? 'hitstop' : opponent === undefined || opponent.dummy.phase === 'free' ? null : opponent.dummy.phase;
   const contact = opponent?.contact ?? null;
   // 先頭の入力の部分は 'free'。いまのフレームだけ、キャラの状態の種類にする
   const fresh = meterCells(history, state.recording ? 1 : FRAME_METER_LEAD + 1).map(
@@ -133,6 +148,7 @@ export function stepFrameMeter(
         ...c,
         state: kind,
         ...(started ? { moveStart: true as const } : {}),
+        ...(started && next.canceled === true ? { cancel: true as const } : {}),
         ...(stun !== null ? { opponent: stun } : {}),
         ...(contact !== null ? { contact } : {}),
       };
@@ -142,7 +158,7 @@ export function stepFrameMeter(
   const cell = fresh[fresh.length - 1] as FrameMeterCell;
   let cells = [...base.cells, ...fresh];
   let starts: readonly MoveStart[] = started
-    ? [...base.starts, { index: cells.length - 1, move: next.move as MoveFrames }]
+    ? [...base.starts, { index: cells.length - 1, move: next.move as MoveFrames, ...(next.canceled === true ? { cancel: true as const } : {}) }]
     : base.starts;
   if (contact !== null && starts.length > 0) {
     starts = starts.map((s, i) => (i === starts.length - 1 ? { ...s, contact } : s));

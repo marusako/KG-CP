@@ -29,6 +29,20 @@
 //   同じになる（tests/frameData.test.ts で確かめている）。ただし 623MK・623HK のガードだけは FAT の blockstun と合わない
 //   （ガードされると着地が早まる技と考えられる。推測）。GG は有利の数字から計算した長さで、実際のゲームの硬直とは違うことがある（推測）
 //
+// ヒットストップ・キャンセル（第14段階）: 確認日 2026-11-06。
+// - スト6: FAT の `hitstop`（ヒットストップ）、`xx`（キャンセル先。`ch` チェーン・`sp` 必殺技・`su` SA）、
+//   チェーンの先は `extraInfo` の「Chains into stand LP / crouch LP / crouch LK」から技の入力（5LP・2LP・2LK）を手で書く。
+//   `tc`（ターゲットコンボ）は入れない。ヒットストップは 1 段目の値（多段は `5*5*5*5*13` の最初の 5、`12(13)` は括弧の外の 12）。
+//   FAT のヒットストップは技ごとに 1 つなので、このアプリはヒットでもガードでも同じ値を使う（このアプリの決め。ガードで違うかは確かめていない）
+// - GG: FAT にヒットストップの数はなく、`gatling`（ガトリング）と `xx`（`sp`・`su`）、`atkLvl`（攻撃レベル）がある。
+//   ヒットストップは攻撃レベルで決まり、Dustloop の表の Lv0 = 11・Lv4 = 15 は検索結果の抜粋で確認した（ページは読み込みを断られた）。
+//   Lv1 = 12・Lv2 = 13・Lv3 = 14 は 1 段ごとに 1 増えるという推測。ブリジットの 5D は溜めない場合の攻撃レベル 2。
+//   ガトリングの先のうち、このアプリにない技（6P・6K・6H・f.S）と、対象外のジャンプキャンセル `j`・ダッシュキャンセル `d` は入れない
+// - キャンセルの猶予の数え方は推測: 1 + hitstop + active が、FAT の `hcWinSpCa`（必殺技・CA の確認の猶予）と、
+//   5LP・5HP・5LK・2LP・2MP・2MK・214 系のすべてで一致する（tests/frameData.test.ts）。FAT に数え方の説明はない。
+//   チェーン・ガトリング・SA キャンセルも同じ窓にする（推測）
+// - ヒットストップを持つ技は、反応のデータ（onHit か onBlock）がある技。反応のデータがなく当たらない技には入れない
+//
 // 入れない技: キャミィの Hooligan Combination（発生が決まらない）と Cannon Strike（空中技）。
 // ブリジットの 214S・214HS（持続が書かれていない）、214K（発生が決まらない）、j.236K（空中技）、632146HS（数が書かれていない）
 
@@ -48,6 +62,10 @@ export interface MoveFrames {
   onHit?: HitAdvantage;
   /** ガード時の有利（FAT の onBlock）。同上 */
   onBlock?: number;
+  /** ヒットストップ（当たったときに、キャラと相手が止まるフレーム数）。反応のデータがある技だけ */
+  hitstop?: number;
+  /** キャンセルできる先の技の入力（例: ['5LP', '2LP', '2LK', '236LK', …]）。キャンセルできない技は書かない */
+  cancels?: readonly string[];
 }
 
 export interface FighterData {
@@ -56,13 +74,13 @@ export interface FighterData {
   moves: readonly MoveFrames[];
 }
 
-/** 有利などの足す項目は extra に書く */
+/** 有利・ヒットストップ・キャンセル先などの足す項目は extra に書く */
 const m = (
   input: string,
   startup: number,
   active: number,
   recovery: number,
-  extra: Partial<Pick<MoveFrames, 'contactRecovery' | 'onHit' | 'onBlock'>> = {},
+  extra: Partial<Pick<MoveFrames, 'contactRecovery' | 'onHit' | 'onBlock' | 'hitstop' | 'cancels'>> = {},
 ): MoveFrames => ({
   input,
   startup,
@@ -73,38 +91,47 @@ const m = (
 
 const kd = (n: number): HitAdvantage => ({ knockdown: n });
 
+const CAMMY_CHAIN = ['5LP', '2LP', '2LK'];
+const CAMMY_SPECIAL = ['236LK', '236MK', '236HK', '623LK', '623MK', '623HK', '214LP', '214MP', '214HP'];
+const CAMMY_SA = ['236236K', '214214P', '236236P'];
+const CAMMY_TO_SPECIAL = [...CAMMY_SPECIAL, ...CAMMY_SA];
+
 /** キャミィ（スト6）。歩きの速さは画面の都合で決める（FAT の値は単位が分からないので使わない） */
 const CAMMY: FighterData = {
   characterId: 'cammy',
   // FAT の stats の nJump `45 (4+38+3)`（跳ぶ前・空中・着地）
   jump: { prejump: 4, air: 38, landing: 3 },
   moves: [
-    m('5LP', 3, 3, 7, { onHit: 5, onBlock: -2 }),
-    m('5MP', 5, 4, 13, { onHit: 6, onBlock: -1 }),
-    m('5HP', 7, 3, 20, { onHit: 2, onBlock: -3 }),
-    m('5LK', 4, 3, 10, { onHit: 2, onBlock: -3 }),
-    m('5MK', 7, 3, 18, { onHit: 3, onBlock: -4 }),
-    m('5HK', 10, 3, 21, { contactRecovery: 19, onHit: 2, onBlock: -3 }),
-    m('2LP', 3, 2, 8, { onHit: 5, onBlock: -2 }),
-    m('2MP', 6, 3, 17, { contactRecovery: 14, onHit: 5, onBlock: -2 }),
-    m('2HP', 9, 4, 15, { onHit: 7, onBlock: 1 }),
-    m('2LK', 4, 3, 7, { onHit: 3, onBlock: -2 }),
-    m('2MK', 7, 3, 18, { onHit: 1, onBlock: -5 }),
-    m('2HK', 8, 3, 24, { onHit: kd(38), onBlock: -10 }),
+    m('5LP', 3, 3, 7, { onHit: 5, onBlock: -2, hitstop: 9, cancels: [...CAMMY_CHAIN, ...CAMMY_TO_SPECIAL] }),
+    m('5MP', 5, 4, 13, { onHit: 6, onBlock: -1, hitstop: 11 }),
+    m('5HP', 7, 3, 20, { onHit: 2, onBlock: -3, hitstop: 13, cancels: CAMMY_TO_SPECIAL }),
+    m('5LK', 4, 3, 10, { onHit: 2, onBlock: -3, hitstop: 9, cancels: CAMMY_TO_SPECIAL }),
+    m('5MK', 7, 3, 18, { onHit: 3, onBlock: -4, hitstop: 11 }),
+    m('5HK', 10, 3, 21, { contactRecovery: 19, onHit: 2, onBlock: -3, hitstop: 13 }),
+    m('2LP', 3, 2, 8, { onHit: 5, onBlock: -2, hitstop: 9, cancels: [...CAMMY_CHAIN, ...CAMMY_TO_SPECIAL] }),
+    m('2MP', 6, 3, 17, { contactRecovery: 14, onHit: 5, onBlock: -2, hitstop: 11, cancels: CAMMY_TO_SPECIAL }),
+    m('2HP', 9, 4, 15, { onHit: 7, onBlock: 1, hitstop: 13 }),
+    m('2LK', 4, 3, 7, { onHit: 3, onBlock: -2, hitstop: 9, cancels: CAMMY_CHAIN }),
+    m('2MK', 7, 3, 18, { onHit: 1, onBlock: -5, hitstop: 9, cancels: CAMMY_TO_SPECIAL }),
+    m('2HK', 8, 3, 24, { onHit: kd(38), onBlock: -10, hitstop: 13 }),
     m('236LK', 8, 13, 21),
     m('236MK', 8, 15, 21),
-    m('236HK', 14, 16, 21),
-    m('623LK', 4, 12, 40, { onHit: kd(20), onBlock: -36 }),
-    m('623MK', 5, 12, 41, { onHit: kd(21), onBlock: -36 }),
-    m('623HK', 6, 12, 44, { onHit: kd(22), onBlock: -36 }),
-    m('214LP', 20, 4, 16, { onHit: 2, onBlock: -3 }),
-    m('214MP', 23, 4, 16, { onHit: 3, onBlock: -2 }),
-    m('214HP', 27, 4, 17, { onHit: 5, onBlock: 3 }),
-    m('236236K', 8, 16, 38, { onHit: kd(10) }),
-    m('214214P', 12, 9, 37, { onHit: kd(12) }),
-    m('236236P', 8, 15, 38, { onHit: kd(17) }),
+    m('236HK', 14, 16, 21, { cancels: ['236236P'] }),
+    m('623LK', 4, 12, 40, { onHit: kd(20), onBlock: -36, hitstop: 12, cancels: ['236236P'] }),
+    m('623MK', 5, 12, 41, { onHit: kd(21), onBlock: -36, hitstop: 12, cancels: ['236236P'] }),
+    m('623HK', 6, 12, 44, { onHit: kd(22), onBlock: -36, hitstop: 12, cancels: ['236236P'] }),
+    m('214LP', 20, 4, 16, { onHit: 2, onBlock: -3, hitstop: 13, cancels: ['236236P'] }),
+    m('214MP', 23, 4, 16, { onHit: 3, onBlock: -2, hitstop: 13, cancels: ['236236P'] }),
+    m('214HP', 27, 4, 17, { onHit: 5, onBlock: 3, hitstop: 13, cancels: ['236236P'] }),
+    m('236236K', 8, 16, 38, { onHit: kd(10), hitstop: 5 }),
+    m('214214P', 12, 9, 37, { onHit: kd(12), hitstop: 16 }),
+    m('236236P', 8, 15, 38, { onHit: kd(17), hitstop: 20 }),
   ],
 };
+
+const BRIDGET_SPECIAL = ['236K', '236S', '236HS', '623P', '63214P'];
+const BRIDGET_SA = ['632146S'];
+const BRIDGET_TO_SPECIAL = [...BRIDGET_SPECIAL, ...BRIDGET_SA];
 
 /** ブリジット（GG） */
 const BRIDGET: FighterData = {
@@ -112,24 +139,24 @@ const BRIDGET: FighterData = {
   // FAT の stats の prejump 4f・jumpTotal 41・landingFrames 6f。空中 31 は上の読み替え（推測）
   jump: { prejump: 4, air: 31, landing: 6 },
   moves: [
-    m('5P', 7, 2, 14, { onHit: -3, onBlock: -6 }),
-    m('5K', 5, 5, 9, { onHit: 1, onBlock: -2 }),
-    m('5S', 6, 6, 13, { onHit: 13, onBlock: 1 }),
-    m('5HS', 10, 5, 29, { onHit: -14, onBlock: -17 }),
-    m('5D', 19, 3, 26, { onHit: 0, onBlock: -15 }),
-    m('2P', 6, 4, 9, { onHit: 0, onBlock: -3 }),
-    m('2K', 4, 3, 11, { onHit: 1, onBlock: -2 }),
-    m('2S', 10, 6, 20, { onHit: -6, onBlock: -9 }),
-    m('2HS', 10, 11, 24, { onHit: -15, onBlock: -18 }),
-    m('2D', 12, 4, 15, { onBlock: -6 }),
-    m('236K', 9, 25, 9, { onHit: -17, onBlock: -20 }),
+    m('5P', 7, 2, 14, { onHit: -3, onBlock: -6, hitstop: 11, cancels: ['5P', '2P', ...BRIDGET_TO_SPECIAL] }),
+    m('5K', 5, 5, 9, { onHit: 1, onBlock: -2, hitstop: 12, cancels: ['5D', '2D', ...BRIDGET_TO_SPECIAL] }),
+    m('5S', 6, 6, 13, { onHit: 13, onBlock: 1, hitstop: 14, cancels: ['2S', '5HS', '2HS', '5D', '2D', ...BRIDGET_TO_SPECIAL] }),
+    m('5HS', 10, 5, 29, { onHit: -14, onBlock: -17, hitstop: 14, cancels: BRIDGET_TO_SPECIAL }),
+    m('5D', 19, 3, 26, { onHit: 0, onBlock: -15, hitstop: 13 }),
+    m('2P', 6, 4, 9, { onHit: 0, onBlock: -3, hitstop: 11, cancels: ['5P', '2P', ...BRIDGET_TO_SPECIAL] }),
+    m('2K', 4, 3, 11, { onHit: 1, onBlock: -2, hitstop: 12, cancels: ['5D', '2D', ...BRIDGET_TO_SPECIAL] }),
+    m('2S', 10, 6, 20, { onHit: -6, onBlock: -9, hitstop: 13, cancels: ['5HS', '2HS', ...BRIDGET_TO_SPECIAL] }),
+    m('2HS', 10, 11, 24, { onHit: -15, onBlock: -18, hitstop: 14, cancels: BRIDGET_TO_SPECIAL }),
+    m('2D', 12, 4, 15, { onBlock: -6, hitstop: 13, cancels: BRIDGET_TO_SPECIAL }),
+    m('236K', 9, 25, 9, { onHit: -17, onBlock: -20, hitstop: 13 }),
     m('236S', 14, 21, 3),
     m('236HS', 14, 21, 3),
     // スターシップ: FAT と wikiwiki のフレーム表は発生 9F。wikiwiki のコマンド技のページには「Ver2.03 で発生 10F→7F」とあり、食い違う（未確認）
-    m('623P', 8, 12, 39, { onBlock: -28 }),
+    m('623P', 8, 12, 39, { onBlock: -28, hitstop: 13 }),
     // ロック ザ ベイビー: FAT は発生 27F、wikiwiki のフレーム表は 26F で食い違う（未確認）。FAT の値を使う
     m('63214P', 26, 2, 28),
-    m('632146S', 10, 45, 47, { onBlock: -29 }),
+    m('632146S', 10, 45, 47, { onBlock: -29, hitstop: 13 }),
   ],
 };
 

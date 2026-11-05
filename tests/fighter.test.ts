@@ -432,3 +432,167 @@ describe('stepFighter: 当たったときの硬直 (第13段階 受け入れ条�
     expect(ss.every((s) => s.contact === undefined)).toBe(true);
   });
 });
+
+describe('stepFighter: ヒットストップとキャンセル (第14段階 受け入れ条件 2〜4)', () => {
+  const LP2: FrameInput = { dir: 2, buttons: ['LP'] };
+  const MP: FrameInput = { dir: 5, buttons: ['MP'] };
+
+  /**
+   * 5LP を 0 で押す。hit が数なら、その持続の 1 フレーム目で stepDummy がするのと同じ印
+   * （contact: true と hitstop）を付けて進める。null なら空振り。
+   * 5LP の持続の 1 フレーム目は 3、ヒットストップ 9 は 4〜12 のあいだ
+   */
+  function runHit(presses: Record<number, FrameInput>, hit: { frame: number; hitstop: number } | null, length = 40): FighterState[] {
+    let s: FighterState = INITIAL_FIGHTER;
+    const history: FrameInput[] = [];
+    const out: FighterState[] = [];
+    for (let i = 0; i < length; i++) {
+      history.push(i === 0 ? LP : (presses[i] ?? N));
+      s = stepFighter(s, history, cammy, SF6, 4);
+      if (hit !== null && i === hit.frame) s = { ...s, contact: true, hitstop: hit.hitstop };
+      out.push(s);
+    }
+    return out;
+  }
+  const HIT = { frame: 3, hitstop: 9 };
+
+  it('hitstop があるあいだ、phase・frame・move は変わらず、frozen: true。hitstop は 1 ずつ減り、0 で消える', () => {
+    const ss = runHit({}, HIT);
+    expect(ss[3]!.hitstop).toBe(9);
+    for (let i = 4; i <= 12; i++) {
+      expect(ss[i]!.phase, `i=${i}`).toBe('active');
+      expect(ss[i]!.frame, `i=${i}`).toBe(0);
+      expect(ss[i]!.move?.input, `i=${i}`).toBe('5LP');
+      expect(ss[i]!.frozen, `i=${i}`).toBe(true);
+      expect(ss[i]!.contact, `i=${i}`).toBe(true);
+    }
+    expect(ss[4]!.hitstop).toBe(8);
+    expect(ss[11]!.hitstop).toBe(1);
+    expect(ss[12]!.hitstop).toBeUndefined();
+  });
+
+  it('止まっていないフレーム（0〜3 と 13 以降）には frozen を付けない。止まり終わったあとは続きから進む', () => {
+    const ss = runHit({}, HIT);
+    for (const i of [0, 1, 2, 3, 13, 14, 15, 21, 22, 30]) expect(ss[i]!.frozen, `i=${i}`).toBeUndefined();
+    expect(ss.slice(13, 15).map((s) => [s.phase, s.frame])).toEqual([['active', 1], ['active', 2]]);
+    expect(ss.slice(15, 22).map((s) => [s.phase, s.frame])).toEqual(
+      [0, 1, 2, 3, 4, 5, 6].map((f) => ['recovery', f]),
+    );
+    expect(ss[22]!.phase).toBe('idle');
+  });
+
+  it('hitstop がなければ（当たっていなければ）止まらない', () => {
+    const ss = runHit({}, null);
+    expect(ss.every((s) => s.frozen === undefined)).toBe(true);
+    expect(phases(ss).slice(0, 13)).toEqual(seq(['startup', 3], ['active', 3], ['recovery', 7]));
+  });
+
+  it('止まっている間に押したキャンセル先（2LP）は、先行入力に入り、予約（cancelTo）になる。止まり終わった 13 から出る', () => {
+    const ss = runHit({ 8: LP2 }, HIT);
+    expect(ss[8]!.buffered?.move.input).toBe('2LP');
+    expect(ss[8]!.cancelTo?.input).toBe('2LP');
+    expect(ss[12]!.cancelTo?.input).toBe('2LP');
+    expect(ss[12]!.phase).toBe('active');
+    expect(ss[13]!.phase).toBe('startup');
+    expect(ss[13]!.frame).toBe(0);
+    expect(ss[13]!.move?.input).toBe('2LP');
+    expect(ss[13]!.canceled).toBe(true);
+    expect(ss[13]!.contact).toBeUndefined();
+    expect(ss[13]!.cancelTo).toBeUndefined();
+    expect(ss[13]!.frozen).toBeUndefined();
+  });
+
+  it('予約はあとから押したキャンセル先で置き換わる（6 に 2LP、10 に 2LK → 2LK が出る）', () => {
+    const LK2: FrameInput = { dir: 2, buttons: ['LK'] };
+    const ss = runHit({ 6: LP2, 10: LK2 }, HIT);
+    expect(ss[6]!.cancelTo?.input).toBe('2LP');
+    expect(ss[10]!.cancelTo?.input).toBe('2LK');
+    expect(ss[13]!.move?.input).toBe('2LK');
+    expect(ss[13]!.canceled).toBe(true);
+  });
+
+  it('止まっている間は、4〜12 のどこで押しても 13 から出る', () => {
+    for (let p = 4; p <= 12; p++) {
+      const ss = runHit({ [p]: LP2 }, HIT);
+      expect(ss[13]!.move?.input, `p=${p}`).toBe('2LP');
+      expect(ss[13]!.phase, `p=${p}`).toBe('startup');
+      expect(ss[13]!.canceled, `p=${p}`).toBe(true);
+    }
+  });
+
+  it('止まり終わったあとの窓: 13・14（持続）・15（硬直の 0 フレーム目）に押すと、そのフレームから出る', () => {
+    for (const p of [13, 14, 15]) {
+      const ss = runHit({ [p]: LP2 }, HIT);
+      expect(ss[p]!.phase, `p=${p}`).toBe('startup');
+      expect(ss[p]!.frame, `p=${p}`).toBe(0);
+      expect(ss[p]!.move?.input, `p=${p}`).toBe('2LP');
+      expect(ss[p]!.canceled, `p=${p}`).toBe(true);
+      expect(ss[p]!.contact, `p=${p}`).toBeUndefined();
+    }
+  });
+
+  it('16 に押すとキャンセルにならない（16 は硬直のまま）。先行入力にも間に合わず、2LP は出ない', () => {
+    const ss = runHit({ 16: LP2 }, HIT);
+    expect(ss[16]!.phase).toBe('recovery');
+    expect(ss[16]!.move?.input).toBe('5LP');
+    expect(ss[16]!.canceled).toBeUndefined();
+    expect(ss.some((s) => s.move?.input === '2LP')).toBe(false);
+  });
+
+  it('当たっていなければ（contact なし）、持続の間に押してもキャンセルにならない', () => {
+    const ss = runHit({ 5: LP2 }, null);
+    expect(ss[5]!.phase).toBe('active'); // 空振りは止まらない。5LP は 6 から硬直、13 から動ける
+    expect(ss[5]!.move?.input).toBe('5LP');
+    expect(ss[5]!.canceled).toBeUndefined();
+    expect(ss.every((s) => s.canceled === undefined)).toBe(true);
+    expect(ss.some((s) => s.move?.input === '2LP')).toBe(false); // 5 に押したものは 13 では age 8 > 4 で捨てられ、出ない
+    // 9 以降に押した先行入力（age 4 以内）なら、通常どおり動けるようになった 13 に出る（キャンセルではない）
+    const buf = runHit({ 9: LP2 }, null);
+    expect(buf[13]!.move?.input).toBe('2LP');
+    expect(buf[13]!.canceled).toBeUndefined();
+  });
+
+  it('キャンセル先でない技（5MP）は予約にならない。止まり終わった 13 は 5LP の持続の 2 フレーム目のまま', () => {
+    for (const p of [4, 8, 12, 13]) {
+      const ss = runHit({ [p]: MP }, HIT);
+      expect(ss[Math.min(p, 12)]!.cancelTo, `p=${p}`).toBeUndefined();
+      expect(ss[13]!.phase, `p=${p}`).toBe('active');
+      expect(ss[13]!.frame, `p=${p}`).toBe(1);
+      expect(ss[13]!.move?.input, `p=${p}`).toBe('5LP');
+      expect(ss.every((s) => s.canceled === undefined), `p=${p}`).toBe(true);
+    }
+  });
+
+  it('キャンセル先でない技は、今までどおり先行入力（硬直が終わってから出る）。8 に押すと古くなって出ない', () => {
+    // 19 に押すと、動けるようになる 22 で 3 フレーム前。出る（キャンセルではない）
+    const late = runHit({ 19: MP }, HIT);
+    expect(late[19]!.buffered?.move.input).toBe('5MP');
+    expect(late[22]!.phase).toBe('startup');
+    expect(late[22]!.move?.input).toBe('5MP');
+    expect(late[22]!.canceled).toBeUndefined();
+    const early = runHit({ 8: MP }, HIT);
+    expect(early.some((s) => s.move?.input === '5MP')).toBe(false);
+  });
+
+  it('canceled は、キャンセルで出した技のあいだ付き、動けるようになると消える', () => {
+    const ss = runHit({ 8: LP2 }, HIT, 50);
+    // 2LP は 13 から 13 フレーム（3 + 2 + 8）。26 から idle
+    for (let i = 13; i <= 25; i++) expect(ss[i]!.canceled, `i=${i}`).toBe(true);
+    expect(ss[26]!.phase).toBe('idle');
+    expect(ss[26]!.canceled).toBeUndefined();
+  });
+
+  it('canceled は、次に（キャンセルでなく）新しい技を出すと消える', () => {
+    // 2LP をキャンセルで出し、27 に 5LP（動ける）
+    const ss = runHit({ 8: LP2, 27: LP }, HIT, 50);
+    expect(ss[27]!.move?.input).toBe('5LP');
+    expect(ss[27]!.canceled).toBeUndefined();
+  });
+
+  it('必殺技へのキャンセルも出る（5LP のヒットストップ中に 236LK を入れ終える → 13 から 236LK）', () => {
+    // 236 + LK を 6・7・8 で入れる
+    const ss = runHit({ 6: { dir: 2, buttons: [] }, 7: { dir: 3, buttons: [] }, 8: { dir: 6, buttons: ['LK'] } }, HIT);
+    expect(ss[13]!.move?.input).toBe('236LK');
+    expect(ss[13]!.canceled).toBe(true);
+  });
+});
