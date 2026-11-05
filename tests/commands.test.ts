@@ -105,21 +105,46 @@ describe('GG_COMMANDS (受け入れ条件 2)', () => {
     expect([...c.buttons]).toEqual(GG_BUTTONS);
   });
 
-  it('溜めは [1,4,7] を 40F 溜めて 6', () => {
+  it('溜めは [1,4,7] を 30F 溜めて 6（Dustloop の 30i）', () => {
     const c = byId(GG_COMMANDS, 'gg-[4]6');
     if (c.kind !== 'motion') throw new Error('motion ではありません');
-    expect(c.steps[0]!.minHold).toBe(40);
+    expect(c.steps[0]!.minHold).toBe(30);
     expect(c.steps[1]!.minHold).toBeUndefined();
   });
 
-  it('猶予は共通の値のまま（ボタン 6、モーション 15・25、360 は 40）。スト6 の値が変わっても動かない', () => {
-    for (const id of ['gg-236', 'gg-214', 'gg-623', 'gg-[4]6']) {
-      expect(byId(GG_COMMANDS, id)).toMatchObject({ motionWindow: 15, buttonWindow: 6 });
+  it('手の間・ボタンまでの猶予・モーション全体が表のとおり（モーション全体は手の間の合計）', () => {
+    const table: [string, number[], number][] = [
+      ['gg-236', [5, 10], 9],
+      ['gg-214', [5, 10], 9],
+      ['gg-623', [8, 12], 6],
+      ['gg-41236', [5, 12, 12, 12], 11],
+      ['gg-63214', [5, 12, 12, 12], 11],
+      ['gg-632146', [6, 12, 12, 12, 12], 11],
+      ['gg-[4]6', [10], 9],
+    ];
+    for (const [id, gaps, buttonWindow] of table) {
+      const c = byId(GG_COMMANDS, id);
+      if (c.kind !== 'motion') throw new Error('motion ではありません');
+      expect([...(c.stepGaps ?? [])], id).toEqual(gaps);
+      expect(c.stepGaps!.length).toBe(c.steps.length - 1);
+      expect(c.buttonWindow, id).toBe(buttonWindow);
+      expect(c.motionWindow, id).toBe(gaps.reduce((a, b) => a + b, 0));
     }
-    for (const id of ['gg-41236', 'gg-63214', 'gg-632146', 'gg-236236', 'gg-214214']) {
-      expect(byId(GG_COMMANDS, id)).toMatchObject({ motionWindow: 25, buttonWindow: 6 });
+  });
+
+  it('236236・214214・360 は stepGaps を持たず、共通の値のまま（モーション 25・25・40、ボタン 6）', () => {
+    for (const id of ['gg-236236', 'gg-214214']) {
+      const c = byId(GG_COMMANDS, id);
+      expect(c, id).toMatchObject({ motionWindow: 25, buttonWindow: 6 });
+      expect(c, id).not.toHaveProperty('stepGaps');
     }
-    expect(byId(GG_COMMANDS, 'gg-360')).toMatchObject({ motionWindow: 40 });
+    const c360 = byId(GG_COMMANDS, 'gg-360');
+    expect(c360).toMatchObject({ motionWindow: 40 });
+    expect(c360).not.toHaveProperty('stepGaps');
+  });
+
+  it('スト6 のコマンドは stepGaps を持たない（値が変わらない）', () => {
+    for (const c of [...SF6_COMMANDS, ...SF6_MOTIONS]) expect(c, c.id).not.toHaveProperty('stepGaps');
   });
 
   it('id が重複しない', () => {

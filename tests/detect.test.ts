@@ -459,3 +459,235 @@ describe('analyzeAttempt: 隣り合う手の方向が重なる定義（変更 2�
     });
   });
 });
+
+describe('analyzeAttempt: 方向と方向の間の猶予 stepGaps (第8段階 受け入れ条件 2)', () => {
+  function gg236(): CommandDef {
+    return {
+      kind: 'motion',
+      notation: 'test',
+      id: 'test-gg-236',
+      name: 'test gg 236',
+      steps: [{ dirs: [2] }, { dirs: [3] }, { dirs: [6] }],
+      buttons: ['LP'],
+      stepGaps: [5, 10],
+      motionWindow: 15,
+      buttonWindow: 9,
+    };
+  }
+
+  it('最初の手は離した所から数える: 2 を 20F 押し続けてから 3、すぐ 6 と P で成功', () => {
+    const h = frames(...rep(2, 20), 3, [6, LP]);
+    expect(analyzeAttempt(h, gg236())).toMatchObject({ ok: true });
+  });
+
+  it('2 の最後のフレームから 5F 後に 3 なら成功', () => {
+    // 2 がフレーム0、3 がフレーム5 → gap 5
+    const h = frames(2, ...rep(5, 4), 3, [6, LP]);
+    expect(analyzeAttempt(h, gg236())).toMatchObject({ ok: true });
+  });
+
+  it('2 の最後のフレームから 6F 後に 3 なら step-slow (stepIndex 1、frames 6、limit 5)', () => {
+    const h = frames(2, ...rep(5, 5), 3, [6, LP]);
+    expect(analyzeAttempt(h, gg236())).toEqual({
+      ok: false,
+      reason: 'step-slow',
+      stepIndex: 1,
+      frames: 6,
+      limit: 5,
+      from: [2],
+      to: [3],
+    });
+  });
+
+  it('2 と 3 のあいだにニュートラルが入っても、間が 5F 以内なら成功', () => {
+    const h = frames(2, 5, 5, 5, 3, [6, LP]);
+    expect(analyzeAttempt(h, gg236())).toMatchObject({ ok: true });
+  });
+
+  it('3 を 11F 押し続けてから 6 なら step-slow (stepIndex 2、frames 11、limit 10)。3 は入れた所から数える', () => {
+    const h = frames(2, ...rep(3, 11), [6, LP]);
+    expect(analyzeAttempt(h, gg236())).toEqual({
+      ok: false,
+      reason: 'step-slow',
+      stepIndex: 2,
+      frames: 11,
+      limit: 10,
+      from: [3],
+      to: [6],
+    });
+  });
+
+  it('3 を 10F 押し続けてから 6 なら成功 (境界)', () => {
+    const h = frames(2, ...rep(3, 10), [6, LP]);
+    expect(analyzeAttempt(h, gg236())).toMatchObject({ ok: true });
+  });
+
+  it('6 から 9F 後に P なら成功、10F 後なら button-late', () => {
+    const ok = frames(2, 3, ...rep(6, 9), [6, LP]);
+    expect(analyzeAttempt(ok, gg236())).toMatchObject({ ok: true, buttonDelay: 9 });
+    const late = frames(2, 3, ...rep(6, 10), [6, LP]);
+    expect(analyzeAttempt(late, gg236())).toEqual({ ok: false, reason: 'button-late', buttonDelay: 10 });
+  });
+
+  it('2 も 3 も遅いときは、前の stepIndex 1 を返す', () => {
+    const h = frames(2, ...rep(5, 7), ...rep(3, 11), [6, LP]);
+    expect(analyzeAttempt(h, gg236())).toMatchObject({ ok: false, reason: 'step-slow', stepIndex: 1 });
+  });
+
+  it('手の間が猶予内でも、モーション全体が motionWindow を超えれば too-slow', () => {
+    const def: CommandDef = { ...gg236(), motionWindow: 4 };
+    const h = frames(2, 5, 5, 3, 5, 5, [6, LP]);
+    expect(analyzeAttempt(h, def)).toMatchObject({ ok: false, reason: 'too-slow' });
+  });
+});
+
+describe('analyzeAttempt: stepGaps がないコマンドは手の間を見ない (第8段階 受け入れ条件 3)', () => {
+  it('2 のあと 5 が長く続いても、motionWindow 内なら成功する', () => {
+    const h = frames(2, ...rep(5, 8), 3, [6, LP]);
+    expect(analyzeAttempt(h, motion236(15, 3))).toMatchObject({ ok: true });
+  });
+});
+
+describe('analyzeAttempt: 溜め + stepGaps (第8段階 受け入れ条件 4)', () => {
+  function gg46(): CommandDef {
+    return {
+      kind: 'motion',
+      notation: 'test',
+      id: 'test-gg-[4]6',
+      name: 'test gg [4]6',
+      steps: [{ dirs: [4], minHold: 30 }, { dirs: [6] }],
+      buttons: ['LP'],
+      stepGaps: [10],
+      motionWindow: 10,
+      buttonWindow: 9,
+    };
+  }
+
+  it('4 を 30F 溜めて離し、10F 以内に 6 なら成功', () => {
+    const h = frames(...rep(4, 30), ...rep(5, 9), [6, LP]);
+    expect(analyzeAttempt(h, gg46())).toMatchObject({ ok: true });
+  });
+
+  it('溜めが 29F なら charge-short', () => {
+    const h = frames(...rep(4, 29), [6, LP]);
+    expect(analyzeAttempt(h, gg46())).toEqual({ ok: false, reason: 'charge-short', heldFrames: 29 });
+  });
+
+  it('離してから 11F 後に 6 なら step-slow (stepIndex 1、frames 11、limit 10)', () => {
+    const h = frames(...rep(4, 30), ...rep(5, 10), [6, LP]);
+    expect(analyzeAttempt(h, gg46())).toEqual({
+      ok: false,
+      reason: 'step-slow',
+      stepIndex: 1,
+      frames: 11,
+      limit: 10,
+      from: [4],
+      to: [6],
+    });
+  });
+});
+
+describe('analyzeAttempt: 手の間の猶予を満たす選び方が 1 つでもあれば成功 (第8段階 レビューの要修正)', () => {
+  // 本物の定義（gg-236: 手の間 [5, 10]、ボタンまで 9）を使う
+  const gg236 = async (): Promise<CommandDef> => {
+    const { GG_COMMANDS } = await import('../src/core/commands');
+    const c = GG_COMMANDS.find((x) => x.id === 'gg-236');
+    if (!c) throw new Error('gg-236 がありません');
+    return { ...c, buttons: ['P'] };
+  };
+  const P = ['P'];
+
+  it('B: 236 のあと、ボタンの前に 3 へぶれても成功（2, 3, 6×4, 3, 6+P）', async () => {
+    const h = frames(2, 3, ...rep(6, 4), 3, [6, P]);
+    expect(analyzeAttempt(h, await gg236())).toMatchObject({ ok: true });
+  });
+
+  it('A: 最初の 3 を使えば猶予内なら成功（2×10, 3, 5×6, 3, 6+P）', async () => {
+    const h = frames(...rep(2, 10), 3, ...rep(5, 6), 3, [6, P]);
+    expect(analyzeAttempt(h, await gg236())).toMatchObject({ ok: true });
+  });
+
+  it('E: 3 を押し続けたあと入れ直しても、最初の 3 から 10F 以内なら成功（2, 3×8, 5, 3, 6+P）', async () => {
+    const h = frames(2, ...rep(3, 8), 5, 3, [6, P]);
+    expect(analyzeAttempt(h, await gg236())).toMatchObject({ ok: true });
+  });
+
+  it('どの選び方でも猶予を超えるときは、今までどおり step-slow（2, 5×6, 3, 6+P）', async () => {
+    const h = frames(2, ...rep(5, 6), 3, [6, P]);
+    expect(analyzeAttempt(h, await gg236())).toMatchObject({ ok: false, reason: 'step-slow', stepIndex: 1, frames: 7, limit: 5 });
+  });
+
+  it('選び直して成功したときも、ボタンまでの猶予は守る（2, 3, 6, 5×10, 3, 6+P は、どの 6 からも遠いか 2→3 が遅い）', async () => {
+    // 前の 6 を使うとボタンまで 12F（> 9）、後ろの 3・6 を使うと 2→3 が 12F（> 5）
+    const h = frames(2, 3, 6, ...rep(5, 10), 3, [6, P]);
+    expect(analyzeAttempt(h, await gg236())).toMatchObject({ ok: false });
+  });
+});
+
+describe('analyzeAttempt: 将来の定義への守り (第8段階 レビューの提案 1)', () => {
+  it('溜めが 2 手目以降にある定義では、別の選び方で溜めを見ずに成功にしない（charge-short のまま）', () => {
+    const def: CommandDef = {
+      kind: 'motion',
+      notation: 'test',
+      id: 'test-charge-second',
+      name: 'test',
+      steps: [{ dirs: [2] }, { dirs: [1, 4, 7], minHold: 30 }, { dirs: [6] }],
+      buttons: ['LP'],
+      stepGaps: [5, 10],
+      motionWindow: 15,
+      buttonWindow: 9,
+    };
+    const h = frames(2, ...rep(4, 3), [6, LP]);
+    expect(analyzeAttempt(h, def)).toMatchObject({ ok: false, reason: 'charge-short' });
+  });
+
+  it('stepGaps の数が「手の数 − 1」と合わない定義は、stepGaps がないものとして motionWindow だけで見る', () => {
+    const def: CommandDef = {
+      kind: 'motion',
+      notation: 'test',
+      id: 'test-short-gaps',
+      name: 'test',
+      steps: [{ dirs: [2] }, { dirs: [3] }, { dirs: [6] }],
+      buttons: ['LP'],
+      stepGaps: [1],
+      motionWindow: 15,
+      buttonWindow: 9,
+    };
+    // 2→3 は 3F（stepGaps[0] = 1 を使えば遅いが、数が合わないので使わない）
+    const h = frames(2, 5, 5, 3, [6, LP]);
+    expect(analyzeAttempt(h, def)).toMatchObject({ ok: true });
+    // 手が足りない入力（2 だけ）は、成功にならない
+    expect(analyzeAttempt(frames(2, [5, LP]), def)).toMatchObject({ ok: false });
+  });
+});
+
+describe('analyzeAttempt: 本物の gg-[4]6（溜め [1,4,7] を 30F、手の間 10、ボタンまで 9）(第8段階 レビューの提案 2)', () => {
+  const charge = async (): Promise<CommandDef> => {
+    const { GG_COMMANDS } = await import('../src/core/commands');
+    const c = GG_COMMANDS.find((x) => x.id === 'gg-[4]6');
+    if (!c) throw new Error('gg-[4]6 がありません');
+    return { ...c, buttons: ['P'] };
+  };
+  const P = ['P'];
+
+  it('1 と 4 をまたいで 30F 溜めれば成功（溜めの方向は 1・4・7）', async () => {
+    expect(analyzeAttempt(frames(...rep(1, 15), ...rep(4, 15), [6, P]), await charge())).toMatchObject({ ok: true });
+  });
+
+  it('29F では charge-short', async () => {
+    expect(analyzeAttempt(frames(...rep(4, 29), [6, P]), await charge())).toMatchObject({
+      ok: false,
+      reason: 'charge-short',
+    });
+  });
+
+  it('30F 溜めて離し、4 を 1F 入れ直してから 6 でも成功（溜め終わりから 6 まで 10F 以内）', async () => {
+    const h = frames(...rep(4, 30), 5, 4, ...rep(5, 5), [6, P]);
+    expect(analyzeAttempt(h, await charge())).toMatchObject({ ok: true });
+  });
+
+  it('30F 溜めても、溜め終わりから 6 まで 11F なら失敗（文は今までどおり charge-short）', async () => {
+    const h = frames(...rep(4, 30), ...rep(5, 9), 4, [6, P]);
+    expect(analyzeAttempt(h, await charge())).toMatchObject({ ok: false, reason: 'charge-short' });
+  });
+});

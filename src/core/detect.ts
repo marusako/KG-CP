@@ -39,6 +39,27 @@ function analyzeMotion(
   const found = findBackward(history, def.steps, b);
   if (!found) return incomplete(history, def, b);
 
+  const gaps = usableStepGaps(def);
+  const result = judgeFound(history, def, b, found, gaps);
+  if (result.ok || !gaps) return result;
+  // 別の選び方では溜めを手 0 でしか確かめないので、溜めが 2 手目以降にある定義では探さない
+  if (def.steps.some((s, i) => i > 0 && s.minHold !== undefined)) return result;
+  // 一番新しいフレームを選ぶ決め方で失敗しても、ほかの選び方なら猶予内のことがある（同じ方向が 2 回出る入力など）
+  return findWithinGaps(history, def, gaps, b) ?? result;
+}
+
+/** 使える stepGaps。数が「手の数 − 1」と合わない定義は、stepGaps がないものとして扱う（途中の手で成功にしないため） */
+function usableStepGaps(def: Extract<CommandDef, { kind: 'motion' }>): readonly number[] | undefined {
+  return def.stepGaps && def.stepGaps.length === def.steps.length - 1 ? def.stepGaps : undefined;
+}
+
+function judgeFound(
+  history: readonly FrameInput[],
+  def: Extract<CommandDef, { kind: 'motion' }>,
+  b: number,
+  found: { frames: number[]; lastFrame: number },
+  gaps: readonly number[] | undefined,
+): AttemptResult {
   const { frames, lastFrame: last } = found;
   const first = frames.length === 1 ? last : (frames[0] as number);
 
@@ -49,11 +70,98 @@ function analyzeMotion(
     if (held < step.minHold) return { ok: false, reason: 'charge-short', heldFrames: held };
   }
 
+  if (gaps) {
+    const slow = checkStepGaps(history, def.steps, gaps, frames);
+    if (slow) return slow;
+  }
+
   const motionFrames = last - first;
   if (motionFrames > def.motionWindow) return { ok: false, reason: 'too-slow', motionFrames };
   const buttonDelay = b - last;
   if (buttonDelay > def.buttonWindow) return { ok: false, reason: 'button-late', buttonDelay };
   return { ok: true, motionFrames, buttonDelay };
+}
+
+/**
+ * 手と手の間・モーション全体・ボタンまでの猶予・溜めを全部満たす選び方が 1 つでもあれば、その成功を返す。なければ null。
+ * 手 0 は手 1 より前で手 0 の方向だった任意のフレームを、手 k（k ≥ 1）は手 k の方向が続く区間の先頭を選ぶ。
+ * 手ごとに「届く候補」を前から持っていく（候補は履歴の長さ以下なので、O(n^2) で足りる）
+ */
+function findWithinGaps(
+  history: readonly FrameInput[],
+  def: Extract<CommandDef, { kind: 'motion' }>,
+  stepGaps: readonly number[],
+  b: number,
+): AttemptResult | null {
+  const inStep = (i: number, step: MotionStep): boolean => {
+    const d = dirAt(history, i);
+    return d !== undefined && step.dirs.includes(d);
+  };
+  const first = def.steps[0] as MotionStep;
+  // 候補のフレーム → そこへ届く選び方での手 0 のフレーム（モーション全体が短くなる方を残す）
+  let reach = new Map<number, number>();
+  for (let i = 0; i <= b; i++) {
+    if (!inStep(i, first)) continue;
+    if (first.minHold !== undefined && heldFrames(history, i, first) < first.minHold) continue;
+    reach.set(i, i);
+  }
+  for (let k = 0; k < stepGaps.length; k++) {
+    const step = def.steps[k + 1] as MotionStep;
+    const next = new Map<number, number>();
+    for (let e = 0; e <= b; e++) {
+      if (!inStep(e, step) || (e > 0 && inStep(e - 1, step))) continue;
+      let origin = -1;
+      for (const [r, ref0] of reach) {
+        const gap = e - r;
+        if (gap > 0 && gap <= (stepGaps[k] as number)) origin = Math.max(origin, ref0);
+      }
+      if (origin >= 0) next.set(e, origin);
+    }
+    reach = next;
+  }
+  let best: AttemptResult | null = null;
+  for (const [e, ref0] of reach) {
+    const buttonDelay = b - e;
+    if (buttonDelay > def.buttonWindow) continue;
+    if (e - ref0 > def.motionWindow) continue;
+    if (best === null || (best.ok && buttonDelay < best.buttonDelay)) best = { ok: true, motionFrames: e - ref0, buttonDelay };
+  }
+  return best;
+}
+
+/**
+ * 手と手の間が stepGaps 以内かを、前の手から順に見て、最初に遅かった所を返す。
+ * 手 k の「入れたフレーム」は、見つけたフレームから同じ手の方向が続く区間の先頭。
+ * 数え始めは、最初の手だけ見つけたフレーム（離す直前）、2 つ目からは入れたフレーム。
+ */
+function checkStepGaps(
+  history: readonly FrameInput[],
+  steps: readonly MotionStep[],
+  stepGaps: readonly number[],
+  frames: readonly number[],
+): AttemptResult | null {
+  const entryOf = (k: number): number => {
+    const step = steps[k] as MotionStep;
+    const f = frames[k] as number;
+    return f - heldFrames(history, f, step) + 1;
+  };
+  for (let k = 0; k < stepGaps.length; k++) {
+    const ref = k === 0 ? (frames[0] as number) : entryOf(k);
+    const gap = entryOf(k + 1) - ref;
+    const limit = stepGaps[k] as number;
+    if (gap > limit) {
+      return {
+        ok: false,
+        reason: 'step-slow',
+        stepIndex: k + 1,
+        frames: gap,
+        limit,
+        from: (steps[k] as MotionStep).dirs,
+        to: (steps[k + 1] as MotionStep).dirs,
+      };
+    }
+  }
+  return null;
 }
 
 /**

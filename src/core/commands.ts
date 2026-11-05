@@ -5,8 +5,9 @@ import type { CommandDef, Direction, MotionStep } from './types';
 const PUNCH = ['LP', 'MP', 'HP'] as const;
 const KICK = ['LK', 'MK', 'HK'] as const;
 
-// 仮の値。motionWindow は出典が見つからず、スト6 も GG も共通の値を使う。
-// BUTTON_WINDOW は GG の値で、これも仮（スト6 の一部は下の SF6_BUTTON_WINDOW）
+// 仮の値。スト6 のモーション全体の猶予は出典が見つからず、共通の値を使う。
+// GG は一部のコマンドだけ Dustloop の値で（ggStepMotion）、それ以外（236236・214214・360）は共通の値を使う。
+// BUTTON_WINDOW も仮（スト6 の一部は下の SF6_BUTTON_WINDOW）
 const MOTION_WINDOW = 15;
 const LONG_MOTION_WINDOW = 25;
 const BUTTON_WINDOW = 6;
@@ -188,16 +189,55 @@ const ggMotion = (notation: string, name: () => string, steps: readonly MotionSt
     name,
   );
 
+/**
+ * GG のコマンド 1 つ。手の間とボタンまでの猶予を、Dustloop の値で決める。motionWindow は手の間の合計。
+ * 出典: Dustloop「GGST - Esoterica」（https://www.dustloop.com/w/GGST/Esoterica 。本体は自動の取得を拒否するので、検索結果の抜粋で確認）と、
+ * その翻訳の有志のまとめ（Notion、2026-10-26 更新、URL は profiles.ts のコメント）。確認日: 2026-11-05。
+ * 表記は「i-5-10-9e」のように、i が最初の入力（離すまで覚えられる）、数が前の手から次の手までの時間。
+ * 読み替え（推測）:
+ * - e の意味は書かれていない。「最後の方向からボタンまで」と読んだ（数の個数が「手の数 − 1 ＋ 1」になるため）
+ * - 数は「前の手を入れたフレームから次の手を入れたフレームまでの差」の最大で、「数 − 1」にせず数のまま使う
+ * - 最初の手だけは離したフレームから数える（i の説明から）
+ */
+const ggStepMotion = (
+  notation: string,
+  name: () => string,
+  steps: readonly MotionStep[],
+  stepGaps: readonly number[],
+  buttonWindow: number,
+): CommandDef =>
+  named(
+    {
+      kind: 'motion',
+      id: `gg-${notation}`,
+      notation,
+      steps,
+      buttons: GG_BUTTONS,
+      motionWindow: stepGaps.reduce((a, b) => a + b, 0),
+      buttonWindow,
+      stepGaps,
+    },
+    name,
+  );
+
 export const GG_COMMANDS: CommandDef[] = [
-  ggMotion('236', plus('236'), [step(2), step(3), step(6)], MOTION_WINDOW),
-  ggMotion('214', plus('214'), [step(2), step(1), step(4)], MOTION_WINDOW),
-  ggMotion('623', plus('623'), [step(6), step(2), step(3)], MOTION_WINDOW),
-  ggMotion('41236', plus('41236'), [step(4), step(1), step(2), step(3), step(6)], LONG_MOTION_WINDOW),
-  ggMotion('63214', plus('63214'), [step(6), step(3), step(2), step(1), step(4)], LONG_MOTION_WINDOW),
-  ggMotion('632146', plus('632146'), [step(6), step(3), step(2), step(1), step(4), step(6)], LONG_MOTION_WINDOW),
+  // 236 は i-5-10-9e
+  ggStepMotion('236', plus('236'), [step(2), step(3), step(6)], [5, 10], 9),
+  // 214 と 63214 は Dustloop の表にない。236・41236 の左右を入れ替えた形なので、同じ値にした（推測）
+  ggStepMotion('214', plus('214'), [step(2), step(1), step(4)], [5, 10], 9),
+  // 623 は i-8-12-6e
+  ggStepMotion('623', plus('623'), [step(6), step(2), step(3)], [8, 12], 6),
+  // 41236 は i-5-12-12-12-11e
+  ggStepMotion('41236', plus('41236'), [step(4), step(1), step(2), step(3), step(6)], [5, 12, 12, 12], 11),
+  ggStepMotion('63214', plus('63214'), [step(6), step(3), step(2), step(1), step(4)], [5, 12, 12, 12], 11),
+  // 632146 は i-6-12-12-12-12-11e
+  ggStepMotion('632146', plus('632146'), [step(6), step(3), step(2), step(1), step(4), step(6)], [6, 12, 12, 12, 12], 11),
+  // 236236・214214 は、手の形が Dustloop（2-6-2-6）と違うので、共通の値のまま
   ggMotion('236236', plus('236236'), [step(2), step(3), step(6), step(2), step(3), step(6)], LONG_MOTION_WINDOW),
   ggMotion('214214', plus('214214'), [step(2), step(1), step(4), step(2), step(1), step(4)], LONG_MOTION_WINDOW),
-  ggMotion('[4]6', () => msg().chargePlusButton('[4]6'), [{ dirs: [1, 4, 7], minHold: 40 }, step(6)], MOTION_WINDOW),
+  // [4]6 は 30i-10-9e。30i を「溜め 30F 以上」と読むのは推測。溜めは Dustloop の 30F を使う（まとめの表には「4（25F）」ともあり、食い違う）
+  ggStepMotion('[4]6', () => msg().chargePlusButton('[4]6'), [{ dirs: [1, 4, 7], minHold: 30 }, step(6)], [10], 9),
+  // 360 は Dustloop の i-30e の読み方が分からないので、共通の値のまま
   named(
     {
       kind: 'rotation',

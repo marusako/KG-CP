@@ -274,3 +274,43 @@ describe('第7段階 レビューの提案 1・3（英語の言い回し、名�
     expect(mbtl()).toBe('メルブラ（今後追加）');
   });
 });
+
+describe('第8段階 step-slow の文 (受け入れ条件 5)', () => {
+  const r = {
+    ok: false,
+    reason: 'step-slow',
+    stepIndex: 1,
+    frames: 7,
+    limit: 5,
+    from: [2],
+    to: [3],
+  } as const;
+
+  it('日本語: 「2 から 3 が遅すぎます（7F、猶予 5F）」', async () => {
+    const { describeResult } = await import('../src/ui/commandPanel');
+    expect(describeResult(r)).toBe('2 から 3 が遅すぎます（7F、猶予 5F）');
+  });
+
+  it('英語: 「Too slow from 2 to 3 (7F, limit 5F)」', async () => {
+    const { describeResult } = await import('../src/ui/commandPanel');
+    setLang('en');
+    expect(describeResult(r)).toBe('Too slow from 2 to 3 (7F, limit 5F)');
+  });
+
+  it('方向が複数ある手は「/」でつなぐ', async () => {
+    const { describeResult } = await import('../src/ui/commandPanel');
+    const multi = { ...r, from: [1, 4, 7], to: [6] } as const;
+    expect(describeResult(multi)).toBe('1/4/7 から 6 が遅すぎます（7F、猶予 5F）');
+    setLang('en');
+    expect(describeResult(multi)).toBe('Too slow from 1/4/7 to 6 (7F, limit 5F)');
+  });
+});
+
+describe('GG のバーの注記 (第8段階 レビューの提案 3)', () => {
+  it('日本語と英語の文', () => {
+    setLang('ja');
+    expect(msg().barNoteGg).toBe('一部の猶予は有志の資料（Dustloop）の値です');
+    setLang('en');
+    expect(msg().barNoteGg).toBe('Some input windows are based on community data (Dustloop)');
+  });
+});

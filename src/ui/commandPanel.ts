@@ -14,6 +14,8 @@ export function describeResult(r: AttemptResult): string {
       return m.resultIncomplete(r.matchedSteps, r.expected.join('/'));
     case 'too-slow':
       return m.resultTooSlow(r.motionFrames);
+    case 'step-slow':
+      return m.resultStepSlow(r.from.join('/'), r.to.join('/'), r.frames, r.limit);
     case 'button-late':
       return m.resultButtonLate(r.buttonDelay);
     case 'charge-short':

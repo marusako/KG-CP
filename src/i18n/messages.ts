@@ -73,6 +73,8 @@ const ja = {
   resultIncomplete: (matched: number, expected: string) =>
     `手が足りません（${matched} 手目まで成功。次は ${expected}）`,
   resultTooSlow: (frames: number) => `モーションが遅すぎます（${frames}F）`,
+  resultStepSlow: (from: string, to: string, frames: number, limit: number) =>
+    `${from} から ${to} が遅すぎます（${frames}F、猶予 ${limit}F）`,
   resultButtonLate: (frames: number) => `ボタンが遅すぎます（最後の手から ${frames}F）`,
   resultChargeShort: (frames: number) => `溜めが足りません（${frames}F）`,
   resultRotationIncomplete: (missing: string) => `回転が足りません（足りない方向: ${missing}）`,
@@ -171,6 +173,7 @@ const ja = {
   barCharSelect: 'キャラ選択へ',
   barTitle: 'タイトルへ',
   barNoteSf6: '一部の猶予は公開資料の値です（2024年5月時点）',
+  barNoteGg: '一部の猶予は有志の資料（Dustloop）の値です',
   barNoteCommon: '猶予は共通の値です',
 };
 
@@ -236,6 +239,7 @@ const en: Messages = {
   resultNoFirstStep: (expected) => `The first step (${expected}) was not entered`,
   resultIncomplete: (matched, expected) => `Incomplete (cleared step ${matched}; next is ${expected})`,
   resultTooSlow: (frames) => `Motion too slow (${frames}F)`,
+  resultStepSlow: (from, to, frames, limit) => `Too slow from ${from} to ${to} (${frames}F, limit ${limit}F)`,
   resultButtonLate: (frames) => `Button too late (${frames}F after the last step)`,
   resultChargeShort: (frames) => `Not charged long enough (${frames}F)`,
   resultRotationIncomplete: (missing) => `Rotation incomplete (missing: ${missing})`,
@@ -326,6 +330,7 @@ const en: Messages = {
   barCharSelect: 'To character select',
   barTitle: 'To title',
   barNoteSf6: 'Some input windows are based on public data (as of May 2024)',
+  barNoteGg: 'Some input windows are based on community data (Dustloop)',
   barNoteCommon: 'Input windows use shared default values',
 };
 

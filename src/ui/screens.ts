@@ -366,7 +366,7 @@ export function createGameBar(root: HTMLElement, onCharSelect: () => void, onBac
     setGame: (id, characterName) => {
       const game = findGame(id)?.name ?? '';
       name.textContent = characterName === undefined ? game : `${game} / ${characterName}`;
-      note.textContent = id === 'sf6' ? msg().barNoteSf6 : msg().barNoteCommon;
+      note.textContent = id === 'sf6' ? msg().barNoteSf6 : id === 'ggst' ? msg().barNoteGg : msg().barNoteCommon;
     },
   };
 }

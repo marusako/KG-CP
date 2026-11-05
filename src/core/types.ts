@@ -33,6 +33,8 @@ export type CommandDef = Searchable &
       motionWindow: number;
       /** 最後の手からボタン押下までの最大フレーム数 */
       buttonWindow: number;
+      /** 手と手の間の最大フレーム数。長さは steps.length - 1 で、stepGaps[k] は手 k から手 k+1 まで。ないコマンドは motionWindow だけで見る。隣り合う手の方向は重ならない前提（重なると手の間が 0 以下になりうる） */
+      stepGaps?: readonly number[];
     }
   | {
       /** 1回転（360） */
@@ -50,6 +52,17 @@ export type AttemptResult =
   | { ok: true; motionFrames: number; buttonDelay: number }
   | { ok: false; reason: 'incomplete'; matchedSteps: number; expected: readonly Direction[] }
   | { ok: false; reason: 'too-slow'; motionFrames: number }
+  | {
+      ok: false;
+      reason: 'step-slow';
+      /** 遅かった手の番号（0 から数える） */
+      stepIndex: number;
+      frames: number;
+      limit: number;
+      /** 前の手と遅かった手の方向 */
+      from: readonly Direction[];
+      to: readonly Direction[];
+    }
   | { ok: false; reason: 'button-late'; buttonDelay: number }
   | { ok: false; reason: 'charge-short'; heldFrames: number }
   | { ok: false; reason: 'rotation-incomplete'; missing: readonly ('left' | 'down' | 'right' | 'up')[] };
