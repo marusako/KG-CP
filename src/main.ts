@@ -23,6 +23,9 @@ import { readGamepads, type PadInfo, type PadState } from './input/gamepad';
 import { KeyboardReader } from './input/keyboard';
 import { detectPadFamily } from './input/padLayout';
 import { findCharacter, moveToCommand, type CharacterData } from './core/characters';
+import { DEFAULT_JUMP, INITIAL_FIGHTER, moveDisplayName, stepFighter, type FighterState } from './core/fighter';
+import { fighterDataFor, type FighterData } from './core/frameData';
+import { stepMoveMeter, type MoveMeterState } from './core/moveMeter';
 import { PROFILES, profileFor, type GameProfile, type PlayableGameId } from './core/profiles';
 import type { GameId } from './core/games';
 import { NO_MENU_BUTTONS, menuActions, type MenuAction, type MenuButtons } from './core/menu';
@@ -34,6 +37,8 @@ import { createInputMeterView } from './ui/inputMeterView';
 import { INITIAL_METER, setMeterMode, stepMeter, type MeterState } from './core/inputMeter';
 import { createKeyConfig } from './ui/keyconfig';
 import { createMetricsPanel } from './ui/metricsPanel';
+import { createMoveMeterView } from './ui/moveMeterView';
+import { createStageView } from './ui/stageView';
 import { createGameBar, createScreens, type Screen } from './ui/screens';
 
 const SETTINGS_KEY = 'kgcp.settings';
@@ -101,6 +106,26 @@ let bindings = loadBindings(profile);
 /** いま練習しているキャラ。null はキャラなし */
 let character: CharacterData | null = findCharacter(profile.id, settings.lastCharacter[profile.id]) ?? null;
 
+/** 技のフレームデータを持つキャラ（データのないキャラ・キャラなしは null） */
+function fighterOf(c: CharacterData | null): { data: FighterData; character: CharacterData } | null {
+  const data = c === null ? undefined : fighterDataFor(c.id);
+  return c !== null && data !== undefined ? { data, character: c } : null;
+}
+let fighter = fighterOf(character);
+/** 棒人間の状態と、技のフレームメーター・帯に積んでいる技 */
+let fighterState: FighterState = INITIAL_FIGHTER;
+const EMPTY_MOVE_METER: MoveMeterState = { cells: [], frozen: false };
+let moveMeter: MoveMeterState = EMPTY_MOVE_METER;
+/** 帯の下の文（技を出したときに、技名とフレームを作っておく。毎フレーム作らないため） */
+let shownMoveText: string | null = null;
+
+/** 棒人間と技のメーターを最初に戻す（キャラやゲームの切り替え・練習画面に入ったとき） */
+function resetFighter(): void {
+  fighterState = INITIAL_FIGHTER;
+  moveMeter = EMPTY_MOVE_METER;
+  shownMoveText = null;
+}
+
 /** キャラの技を、コマンド練習の一覧（読めないものは除く）と注記にする */
 function practiceOf(p: GameProfile, c: CharacterData | null): { commands: CommandDef[]; notes: Map<string, string> } {
   if (c === null) return { commands: [...p.practiceCommands], notes: new Map() };
@@ -115,6 +140,8 @@ function switchPractice(next: GameProfile, nextCharacter: CharacterData | null):
   if (!gameChanged && nextCharacter?.id === character?.id) return;
   profile = next;
   character = nextCharacter;
+  fighter = fighterOf(nextCharacter);
+  resetFighter();
   const { commands, notes } = practiceOf(next, nextCharacter);
   panel.setCommands(commands, notes);
   comboPanel.setProfile(next, nextCharacter ?? undefined);
@@ -144,6 +171,8 @@ const gameBar = createGameBar(
   },
 );
 gameBar.setGame(profile.id, character ? pick(character.name, getLang()) : undefined);
+const stageView = createStageView(gameRoot);
+const moveMeterView = createMoveMeterView(gameRoot);
 const tabBar = document.createElement('nav');
 tabBar.className = 'tabs';
 gameRoot.append(tabBar);
@@ -228,6 +257,7 @@ const screens = createScreens(app, {
       history.splice(0, history.length, { dir: 5, buttons: [] });
       meter = INITIAL_METER;
       meterView.render(meter);
+      resetFighter();
     }
   },
 });
@@ -384,6 +414,16 @@ function stepFrame(end: number): void {
     if (result) panel.showResult(result);
   }
   frame++;
+  // 練習画面の外では、棒人間と技のメーターも進めない（入ると最初に戻す）
+  if (screens.current() === 'game') {
+    const before = fighterState;
+    fighterState = stepFighter(before, history, fighter, profile, profile.inputBuffer);
+    if (fighterState.phase === 'startup' && fighterState.frame === 0 && fighterState.move !== null && fighter !== null) {
+      const m = fighterState.move;
+      shownMoveText = msg().moveMeterText(moveDisplayName(m, fighter.character, profile, getLang()), m);
+    }
+    moveMeter = stepMoveMeter(moveMeter, before, fighterState);
+  }
   // 練習画面の外では、見えないメーターを進めない（入ると空に戻すので、外の入力は残らない）
   const nextMeter = screens.current() === 'game' ? stepMeter(meter, history) : meter;
   if (nextMeter !== meter) {
@@ -409,7 +449,18 @@ function loop(): void {
     history.splice(0, history.length, ...historyAfterStall(history));
     renderHistory(compressHistory(history, HISTORY_ROWS));
     comboPanel.invalidate(msg().stalled);
+    // 止まる前後の入力がつながらないよう、技の途中なら帯を止めて棒人間を最初に戻す
+    moveMeter = stepMoveMeter(moveMeter, fighterState, INITIAL_FIGHTER);
+    fighterState = INITIAL_FIGHTER;
     metrics.onStall();
+  }
+  // 描くのは練習画面にいるときだけ。どちらも、前と同じ中身なら何もしない
+  if (screens.current() === 'game') {
+    stageView.render(fighterState, (fighter?.data.jump ?? DEFAULT_JUMP).air);
+    moveMeterView.render(
+      moveMeter,
+      fighter === null ? msg().moveMeterNoCharacter : (shownMoveText ?? msg().moveMeterIdle),
+    );
   }
   metrics.onRaf(now, due.frameEnds.length, due.stalled);
   requestAnimationFrame(loop);

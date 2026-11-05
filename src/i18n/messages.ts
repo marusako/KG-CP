@@ -1,5 +1,6 @@
 import { getLang, type Lang } from './lang';
 import type { MeterRun } from '../core/inputMeter';
+import type { MoveFrames } from '../core/frameData';
 
 // 画面に出す文の表。ja と en のキーは、Messages の型で同じになるよう縛る。
 // 数字などが入る文は関数にする。表記（236K など）とボタン名（LP・HS など）は訳さない。
@@ -10,6 +11,16 @@ function runsText(runs: readonly MeterRun[]): string {
     .map((r) => `${r.dir} (${r.frames}F)${r.pressed.map((b) => ` + ${b}`).join('')}`)
     .join(' → ');
 }
+
+/** スト6 のボタンの日本語の書き方（通常技の名前で使う） */
+const JA_STRENGTH: Readonly<Record<string, string>> = {
+  LP: '弱P',
+  MP: '中P',
+  HP: '強P',
+  LK: '弱K',
+  MK: '中K',
+  HK: '強K',
+};
 
 const ja = {
   // 共通
@@ -128,6 +139,16 @@ const ja = {
   meterFreeze: 'ボタンで止める',
   meterLive: '流す',
   meterRunsText: runsText,
+  stageLabel: '棒人間のステージ',
+  moveMeterTitle: '技のフレームメーター',
+  moveMeterNoCharacter: 'キャラを選ぶと技のフレームが出ます',
+  /** 通常技の名前。スト6 のボタンは弱・中・強で書く（GG のボタンはそのまま） */
+  normalMoveName: (posture: 'stand' | 'crouch', button: string) =>
+    `${posture === 'stand' ? '立ち' : 'しゃがみ'}${JA_STRENGTH[button] ?? button}`,
+  moveMeterIdle: '技を出すと、フレームがここに出ます',
+  // 発生は FAT と同じ数え方（発生前 + 1）で出す。name は技名と入力（例: 立ち弱P (5LP)）
+  moveMeterText: (name: string, m: MoveFrames) =>
+    `${name} — 発生 ${m.startup + 1}F / 持続 ${m.active}F / 硬直 ${m.recovery}F / 全体 ${m.startup + m.active + m.recovery}F`,
   metricsLabel: ' 計測',
   metricsSteps: (p0: string, p1: string, p2: string, p3: string) =>
     `1回の描画で進んだフレーム数: 0 → ${p0} / 1 → ${p1} / 2 → ${p2} / 3以上 → ${p3}`,
@@ -179,6 +200,7 @@ const ja = {
   langSaveFailed: '設定を保存できないため、言語を切り替えられません（ブラウザの保存が無効になっている可能性があります）',
   creditsAuthor: '作者: marusako',
   creditsSource: 'ソースコード: ',
+  creditsFrameData: 'フレームデータ: ',
   disclaimer:
     '各ゲームの名称は、それぞれの権利者の商標または登録商標です。このアプリは非公式のファンメイドツールで、権利者とは関係ありません。',
   exitMessage: 'ブラウザ版は、ここからは閉じられません。タブを閉じて終了してください',
@@ -293,6 +315,13 @@ const en: Messages = {
   meterFreeze: 'Stop at button',
   meterLive: 'Live',
   meterRunsText: runsText,
+  stageLabel: 'Stick figure stage',
+  moveMeterTitle: 'Move frame meter',
+  moveMeterNoCharacter: 'Choose a character to see move frames',
+  normalMoveName: (posture, button) => `${posture === 'stand' ? 'Standing' : 'Crouching'} ${button}`,
+  moveMeterIdle: 'Frames appear here when you use a move',
+  moveMeterText: (name, m) =>
+    `${name} — Startup ${m.startup + 1}F / Active ${m.active}F / Recovery ${m.recovery}F / Total ${m.startup + m.active + m.recovery}F`,
   metricsLabel: ' Metrics',
   metricsSteps: (p0, p1, p2, p3) => `Frames advanced per render: 0 → ${p0} / 1 → ${p1} / 2 → ${p2} / 3+ → ${p3}`,
   metricsInterval: (mean, hz) => `Render interval: avg ${mean} ms (${hz} Hz)`,
@@ -340,6 +369,7 @@ const en: Messages = {
   langSaveFailed: "Couldn't save settings, so the language can't be changed (browser storage may be disabled)",
   creditsAuthor: 'Author: marusako',
   creditsSource: 'Source code: ',
+  creditsFrameData: 'Frame data: ',
   disclaimer:
     'Each game name is a trademark or registered trademark of its respective owner. This app is an unofficial fan-made tool and is not affiliated with any owner.',
   exitMessage: 'The browser version cannot be closed from here. Please close the tab to exit',

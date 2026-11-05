@@ -13,6 +13,7 @@ const VOLUME_STEP = 5;
 /** 設定画面の「言語」の行の位置（音量の下） */
 const LANGUAGE_ROW = 1;
 const REPO_URL = 'https://github.com/marusako/KG-CP';
+const FAT_URL = 'https://github.com/D4RKONION/FAT';
 
 /** 「戻る」で行く先。title だけ戻れない */
 const BACK_TO: Readonly<Record<Exclude<Screen, 'game'>, Screen | null>> = {
@@ -280,7 +281,13 @@ export function createScreens(root: HTMLElement, opts: ScreensOptions): Screens 
     author.append(msg().creditsAuthor);
     const source = el('p');
     source.append(msg().creditsSource, link);
-    addPage('credits', msg().menuCredits, [], [], () => {}, [author, source, el('p', 'note', msg().disclaimer)]);
+    const fatLink = el('a', undefined, FAT_URL);
+    fatLink.href = FAT_URL;
+    fatLink.target = '_blank';
+    fatLink.rel = 'noopener noreferrer';
+    const frameData = el('p');
+    frameData.append(msg().creditsFrameData, 'FAT (', fatLink, ')');
+    addPage('credits', msg().menuCredits, [], [], () => {}, [author, source, frameData, el('p', 'note', msg().disclaimer)]);
   }
 
   // exit

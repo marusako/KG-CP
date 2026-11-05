@@ -60,7 +60,7 @@ const BRIDGET_MOVES: MoveRow[] = [
   ['bridget-stop-and-dash-return', { en: 'Stop and Dash (Hit on Return)' }, ['214S', '214HS'], 'special'],
   ['bridget-rolling-movement', { en: 'Rolling Movement' }, ['214K'], 'special'],
   ['bridget-starship', { en: 'Starship' }, ['623P'], 'special'],
-  ['bridget-rock-the-baby', { en: 'Rock the Baby' }, ['632146P'], 'special'],
+  ['bridget-rock-the-baby', { en: 'Rock the Baby' }, ['63214P'], 'special'],
   ['bridget-loop-the-loop', { en: 'Loop the Loop' }, ['632146S'], 'super'],
   ['bridget-killing-machine', { en: 'Return of the Killing Machine' }, ['632146HS'], 'super'],
 ];

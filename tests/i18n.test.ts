@@ -55,6 +55,9 @@ const tableOf = (lang: Lang): Table => {
  */
 const SPECIAL_ARGS: Readonly<Record<string, readonly unknown[]>> = {
   meterRunsText: [[{ dir: 2, frames: 3, pressed: [] }, { dir: 6, frames: 2, pressed: ['P'] }]],
+  // 第10段階: 技のフレームメーターの文（技名と技のフレーム）と、通常技の名前（姿勢とボタン）
+  moveMeterText: ['X (5LP)', { input: '5LP', startup: 3, active: 3, recovery: 7 }],
+  normalMoveName: ['stand', 'LP'],
 };
 
 /** 関数は代表の引数（数）で呼んで文字列にする。入れ子のオブジェクトは辿る */

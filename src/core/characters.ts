@@ -109,7 +109,9 @@ const CAMMY: CharacterData = {
 // ブリジット（GG）。
 // 日本語名は、確かめられる出典が見つからなかった（公式サイトのコマンド表は画像で読み取れなかった）ので ja を付けない。
 // ja がないときは、日本語でも英語名を出す。ゲーム内のコマンド表などで確かめた名前を、あとで足す。
-// 出典: dashfight の技表。Starship の入力は gamezo の記事（623P）。Rock the Baby は dashfight だけで確認（1 か所のみ）。
+// 出典: dashfight の技表。Starship の入力は gamezo の記事（623P）。
+// Rock the Baby の入力は出典が食い違う。dashfight（1 か所のみ）は 632146P、FAT（2026-06 更新）は 63214P。
+// FAT のほうが新しく、ほかの技の入力とも合っているので 63214P にした。
 const BRIDGET: CharacterData = {
   id: 'bridget',
   game: 'ggst',
@@ -142,7 +144,7 @@ const BRIDGET: CharacterData = {
     {
       id: 'bridget-rock-the-baby',
       name: { en: 'Rock the Baby' },
-      inputs: ['632146P'],
+      inputs: ['63214P'],
       kind: 'special',
       note: { ja: '空中でも出せます', en: 'Can also be performed in the air' },
     },
