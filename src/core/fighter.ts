@@ -113,10 +113,6 @@ export interface FighterState {
   frame: number;
   /** 出している技（startup・active・recovery のときだけ） */
   move: MoveFrames | null;
-  /** 横の位置（0〜1。0.5 が真ん中） */
-  x: number;
-  /** ジャンプの向き（-1 後ろ、0 垂直、1 前） */
-  jumpDir: -1 | 0 | 1;
   /** 動けない間に押された技（先行入力）。動けるようになった最初のフレームで出す */
   buffered: { move: MoveFrames; age: number } | null;
 }
@@ -125,22 +121,11 @@ export const INITIAL_FIGHTER: FighterState = {
   phase: 'idle',
   frame: 0,
   move: null,
-  x: 0.3,
-  jumpDir: 0,
   buffered: null,
 };
 
-/** キャラなしのときのジャンプ（キャミィと同じ） */
 /** キャラなしのジャンプ。キャミィ（FAT の nJump `45 (4+38+3)`）と同じ数を使う */
 export const DEFAULT_JUMP = { prejump: 4, air: 38, landing: 3 } as const;
-
-/** 歩きの 1 フレームの移動量と、空中の横の移動量（画面の幅に対する割合。画面の都合で決めた値） */
-const WALK_SPEED = 0.004;
-const AIR_SPEED = 0.006;
-const X_MIN = 0.05;
-const X_MAX = 0.95;
-
-const clampX = (x: number): number => Math.min(X_MAX, Math.max(X_MIN, x));
 
 /** ジャンプ・技を出している間（動けない間）か */
 function isBusy(phase: FighterPhase): boolean {
@@ -153,25 +138,23 @@ function moveLength(move: MoveFrames, phase: 'startup' | 'active' | 'recovery'):
 }
 
 function startMove(state: FighterState, move: MoveFrames): FighterState {
-  return { ...state, phase: 'startup', frame: 0, move, jumpDir: 0, buffered: null };
+  return { ...state, phase: 'startup', frame: 0, move, buffered: null };
 }
 
 /** 動ける状態のとき、方向から次の状態を決める（同じなら state をそのまま返す） */
 function freeStep(state: FighterState, dir: number): FighterState {
   if (dir >= 7) {
-    const jumpDir = dir === 7 ? -1 : dir === 9 ? 1 : 0;
-    return { ...state, phase: 'prejump', frame: 0, move: null, jumpDir, buffered: null };
+    return { ...state, phase: 'prejump', frame: 0, move: null, buffered: null };
   }
   if (dir === 6 || dir === 4) {
     const phase = dir === 6 ? 'walkForward' : 'walkBack';
-    const x = clampX(state.x + (dir === 6 ? WALK_SPEED : -WALK_SPEED));
-    return { ...state, phase, frame: state.phase === phase ? state.frame + 1 : 0, move: null, x, jumpDir: 0, buffered: null };
+    return { ...state, phase, frame: state.phase === phase ? state.frame + 1 : 0, move: null, buffered: null };
   }
   const phase = dir <= 3 ? 'crouch' : 'idle';
-  if (state.phase === phase && state.frame === 0 && state.move === null && state.jumpDir === 0 && state.buffered === null) {
+  if (state.phase === phase && state.frame === 0 && state.move === null && state.buffered === null) {
     return state;
   }
-  return { ...state, phase, frame: 0, move: null, jumpDir: 0, buffered: null };
+  return { ...state, phase, frame: 0, move: null, buffered: null };
 }
 
 /**
@@ -180,7 +163,6 @@ function freeStep(state: FighterState, dir: number): FighterState {
  * - 技の途中: startup → active → recovery と進み、終わったら動ける状態へ
  * - 技の途中や着地中に選ばれた技は buffered に入れる。動けるようになるまでに age が inputBuffer を超えたら捨てる
  * - ジャンプ: prejump → air → landing。空中ではボタンを無視する（空中技は 2 段目）
- * - 歩きは 1 フレームに一定の量だけ x を動かし、0.05〜0.95 で止める
  * idle・crouch のままなら同じ state を返す（描き直しを省くため）
  */
 export function stepFighter(
@@ -212,11 +194,9 @@ export function stepFighter(
     case 'prejump':
       next = frame < jump.prejump ? { ...state, frame } : { ...state, phase: 'air', frame: 0 };
       break;
-    case 'air': {
-      const x = clampX(state.x + state.jumpDir * AIR_SPEED);
-      next = frame < jump.air ? { ...state, frame, x } : { ...state, phase: 'landing', frame: 0, x };
+    case 'air':
+      next = frame < jump.air ? { ...state, frame } : { ...state, phase: 'landing', frame: 0 };
       break;
-    }
     case 'landing':
       if (frame < jump.landing) next = { ...state, frame };
       break;
@@ -238,7 +218,7 @@ export function stepFighter(
 
   // 動けるようになった最初のフレーム。先行入力があれば、そのフレームが startup の 0 フレーム目
   if (buffered !== null) return startMove(state, buffered.move);
-  return freeStep({ ...state, phase: 'idle', frame: 0, move: null, jumpDir: 0, buffered: null }, dir);
+  return freeStep({ ...state, phase: 'idle', frame: 0, move: null, buffered: null }, dir);
 }
 
 /**

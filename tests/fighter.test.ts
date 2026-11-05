@@ -150,9 +150,8 @@ const seq = (...parts: [string, number][]): string[] => parts.flatMap(([p, n]) =
 const LP: FrameInput = { dir: 5, buttons: ['LP'] };
 
 describe('INITIAL_FIGHTER', () => {
-  it('idle で、x は 0.3、技も先行入力もない', () => {
+  it('idle で、技も先行入力もない', () => {
     expect(INITIAL_FIGHTER.phase).toBe('idle');
-    expect(INITIAL_FIGHTER.x).toBe(0.3);
     expect(INITIAL_FIGHTER.move).toBeNull();
     expect(INITIAL_FIGHTER.buffered).toBeNull();
   });
@@ -259,46 +258,11 @@ describe('stepFighter: 歩き・しゃがみ (第10段階 受け入れ条件 4)'
     expect(run([{ dir: 4, buttons: [] }])[0]!.phase).toBe('walkBack');
   });
 
-  it('離すと idle に戻り、位置は動かない', () => {
+  it('離すと idle に戻る', () => {
     const ss = run([...rep(5, { dir: 6, buttons: [] }), ...rep(5, N)]);
+    expect(ss[4]!.phase).toBe('walkForward');
     expect(ss[5]!.phase).toBe('idle');
-    expect(ss[9]!.x).toBe(ss[5]!.x);
-  });
-
-  it('前歩きで x が増え、後ろ歩きで x が減る', () => {
-    const f = run(rep(10, { dir: 6, buttons: [] }));
-    for (let i = 1; i < f.length; i++) expect(f[i]!.x).toBeGreaterThan(f[i - 1]!.x);
-    expect(f[0]!.x).toBeGreaterThan(INITIAL_FIGHTER.x);
-    const b = run(rep(10, { dir: 4, buttons: [] }));
-    for (let i = 1; i < b.length; i++) expect(b[i]!.x).toBeLessThan(b[i - 1]!.x);
-    expect(b[0]!.x).toBeLessThan(INITIAL_FIGHTER.x);
-  });
-
-  it('1 フレームの移動量は一定', () => {
-    const f = run(rep(6, { dir: 6, buttons: [] }));
-    const d = f[1]!.x - f[0]!.x;
-    for (let i = 2; i < f.length; i++) expect(f[i]!.x - f[i - 1]!.x).toBeCloseTo(d, 9);
-  });
-
-  it('右端（0.95）で止まり、超えない', () => {
-    const f = run(rep(3000, { dir: 6, buttons: [] }));
-    const last = f[f.length - 1]!;
-    expect(last.x).toBeCloseTo(0.95, 9);
-    expect(Math.max(...f.map((s) => s.x))).toBeLessThanOrEqual(0.95 + 1e-9);
-    expect(f[f.length - 2]!.x).toBe(last.x);
-  });
-
-  it('左端（0.05）で止まり、下回らない', () => {
-    const f = run(rep(3000, { dir: 4, buttons: [] }));
-    const last = f[f.length - 1]!;
-    expect(last.x).toBeCloseTo(0.05, 9);
-    expect(Math.min(...f.map((s) => s.x))).toBeGreaterThanOrEqual(0.05 - 1e-9);
-    expect(f[f.length - 2]!.x).toBe(last.x);
-  });
-
-  it('端で止まっていても、逆に歩けばすぐ動き出す', () => {
-    const f = run([...rep(3000, { dir: 6, buttons: [] }), { dir: 4, buttons: [] }]);
-    expect(f[3000]!.x).toBeLessThan(f[2999]!.x);
+    expect(ss[9]!.phase).toBe('idle');
   });
 });
 
@@ -321,24 +285,6 @@ describe('stepFighter: ジャンプ (第10段階 受け入れ条件 4)', () => {
   it('ブリジット: prejump 4F → air 31F → landing 6F', () => {
     const ss = run([up, ...rep(50, N)], { fighter: bridget, rules: GG });
     expect(phases(ss).slice(0, 42)).toEqual(seq(['prejump', 4], ['air', 31], ['landing', 6], ['idle', 1]));
-  });
-
-  it('ジャンプの向き: 7 は -1、8 は 0、9 は 1', () => {
-    expect(run([{ dir: 7, buttons: [] }, N])[1]!.jumpDir).toBe(-1);
-    expect(run([up, N])[1]!.jumpDir).toBe(0);
-    expect(run([{ dir: 9, buttons: [] }, N])[1]!.jumpDir).toBe(1);
-  });
-
-  it('前ジャンプでは空中で x が増え、後ろジャンプでは減る', () => {
-    const fwd = run([{ dir: 9, buttons: [] }, ...rep(45, N)]);
-    expect(fwd[41]!.x).toBeGreaterThan(fwd[3]!.x);
-    const back = run([{ dir: 7, buttons: [] }, ...rep(45, N)]);
-    expect(back[41]!.x).toBeLessThan(back[3]!.x);
-  });
-
-  it('垂直ジャンプでは x が変わらない', () => {
-    const ss = run([up, ...rep(45, N)]);
-    expect(ss[44]!.x).toBe(INITIAL_FIGHTER.x);
   });
 
   it('空中ではボタンを無視する（先行入力にも入らず、着地後に技は出ない）', () => {
@@ -388,7 +334,6 @@ describe('stepFighter: キャラなし (第10段階 受け入れ条件 4)', () =
     expect(phases(ss).slice(0, 46)).toEqual(seq(['prejump', 4], ['air', 38], ['landing', 3], ['idle', 1]));
   });
 });
-
 
 describe('moveDisplayName: 技名を選んだ言語で出す（ユーザーの要望で追加）', () => {
   const cammy = CHARACTERS.find((c) => c.id === 'cammy')!;

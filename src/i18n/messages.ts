@@ -135,17 +135,15 @@ const ja = {
 
   // 入力履歴・計測
   historyTitle: '入力履歴',
-  meterTitle: 'フレームメーター',
-  meterFreeze: 'ボタンで止める',
-  meterLive: '流す',
+  frameMeterTitle: 'フレームメーター',
+  frameMeterMoves: (texts: readonly string[]) => texts.join(' → '),
+  frameMeterLegend: '緑: 発生（数 + 1 が発生のフレーム）　赤: 持続　青: 硬直　灰: 動ける　水色: ジャンプ　橙の枠: 先行入力',
+  frameMeterEmpty: 'ボタンを押すと、ここに帯が出ます',
   meterRunsText: runsText,
-  stageLabel: '棒人間のステージ',
-  moveMeterTitle: '技のフレームメーター',
   moveMeterNoCharacter: 'キャラを選ぶと技のフレームが出ます',
   /** 通常技の名前。スト6 のボタンは弱・中・強で書く（GG のボタンはそのまま） */
   normalMoveName: (posture: 'stand' | 'crouch', button: string) =>
     `${posture === 'stand' ? '立ち' : 'しゃがみ'}${JA_STRENGTH[button] ?? button}`,
-  moveMeterIdle: '技を出すと、フレームがここに出ます',
   // 発生は FAT と同じ数え方（発生前 + 1）で出す。name は技名と入力（例: 立ち弱P (5LP)）
   moveMeterText: (name: string, m: MoveFrames) =>
     `${name} — 発生 ${m.startup + 1}F / 持続 ${m.active}F / 硬直 ${m.recovery}F / 全体 ${m.startup + m.active + m.recovery}F`,
@@ -311,15 +309,14 @@ const en: Messages = {
   unreadableSaved: (n) => `${n} saved recipe(s) could not be read (the data is kept, not deleted)`,
 
   historyTitle: 'Input history',
-  meterTitle: 'Frame meter',
-  meterFreeze: 'Stop at button',
-  meterLive: 'Live',
+  frameMeterTitle: 'Frame meter',
+  frameMeterMoves: (texts) => texts.join(' → '),
+  frameMeterLegend:
+    'Green: startup (number + 1 is the startup frame)  Red: active  Blue: recovery  Gray: free  Cyan: jump  Orange frame: buffered input',
+  frameMeterEmpty: 'Press a button to start the meter',
   meterRunsText: runsText,
-  stageLabel: 'Stick figure stage',
-  moveMeterTitle: 'Move frame meter',
   moveMeterNoCharacter: 'Choose a character to see move frames',
   normalMoveName: (posture, button) => `${posture === 'stand' ? 'Standing' : 'Crouching'} ${button}`,
-  moveMeterIdle: 'Frames appear here when you use a move',
   moveMeterText: (name, m) =>
     `${name} — Startup ${m.startup + 1}F / Active ${m.active}F / Recovery ${m.recovery}F / Total ${m.startup + m.active + m.recovery}F`,
   metricsLabel: ' Metrics',

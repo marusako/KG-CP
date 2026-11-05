@@ -23,9 +23,9 @@ import { readGamepads, type PadInfo, type PadState } from './input/gamepad';
 import { KeyboardReader } from './input/keyboard';
 import { detectPadFamily } from './input/padLayout';
 import { findCharacter, moveToCommand, type CharacterData } from './core/characters';
-import { DEFAULT_JUMP, INITIAL_FIGHTER, moveDisplayName, stepFighter, type FighterState } from './core/fighter';
+import { INITIAL_FIGHTER, moveDisplayName, stepFighter, type FighterState } from './core/fighter';
 import { fighterDataFor, type FighterData } from './core/frameData';
-import { stepMoveMeter, type MoveMeterState } from './core/moveMeter';
+import { EMPTY_FRAME_METER, stepFrameMeter, stopFrameMeter, syncMoveTexts, type FrameMeterState } from './core/frameMeter';
 import { PROFILES, profileFor, type GameProfile, type PlayableGameId } from './core/profiles';
 import type { GameId } from './core/games';
 import { NO_MENU_BUTTONS, menuActions, type MenuAction, type MenuButtons } from './core/menu';
@@ -33,12 +33,9 @@ import { DEFAULT_SETTINGS, parseSettings, serializeSettings, type Settings } fro
 import { createCommandPanel } from './ui/commandPanel';
 import { createComboPanel } from './ui/comboPanel';
 import { createHistoryView } from './ui/historyView';
-import { createInputMeterView } from './ui/inputMeterView';
-import { INITIAL_METER, setMeterMode, stepMeter, type MeterState } from './core/inputMeter';
+import { createFrameMeterView } from './ui/frameMeterView';
 import { createKeyConfig } from './ui/keyconfig';
 import { createMetricsPanel } from './ui/metricsPanel';
-import { createMoveMeterView } from './ui/moveMeterView';
-import { createStageView } from './ui/stageView';
 import { createGameBar, createScreens, type Screen } from './ui/screens';
 
 const SETTINGS_KEY = 'kgcp.settings';
@@ -112,18 +109,20 @@ function fighterOf(c: CharacterData | null): { data: FighterData; character: Cha
   return c !== null && data !== undefined ? { data, character: c } : null;
 }
 let fighter = fighterOf(character);
-/** 棒人間の状態と、技のフレームメーター・帯に積んでいる技 */
+/** キャラの状態と、フレームメーターの帯 */
 let fighterState: FighterState = INITIAL_FIGHTER;
-const EMPTY_MOVE_METER: MoveMeterState = { cells: [], frozen: false };
-let moveMeter: MoveMeterState = EMPTY_MOVE_METER;
-/** 帯の下の文（技を出したときに、技名とフレームを作っておく。毎フレーム作らないため） */
-let shownMoveText: string | null = null;
+let frameMeter: FrameMeterState = EMPTY_FRAME_METER;
+/** 帯の starts と同じ順の、技の文（技が始まったときに作っておく。毎フレーム作らない） */
+let moveTexts: readonly string[] = [];
+/** moveTexts をつないだ、帯の下の 1 行目 */
+let movesLine = '';
 
-/** 棒人間と技のメーターを最初に戻す（キャラやゲームの切り替え・練習画面に入ったとき） */
+/** キャラの状態と帯を最初に戻す（キャラやゲームの切り替え・練習画面に入ったとき） */
 function resetFighter(): void {
   fighterState = INITIAL_FIGHTER;
-  moveMeter = EMPTY_MOVE_METER;
-  shownMoveText = null;
+  frameMeter = EMPTY_FRAME_METER;
+  moveTexts = [];
+  movesLine = '';
 }
 
 /** キャラの技を、コマンド練習の一覧（読めないものは除く）と注記にする */
@@ -171,15 +170,10 @@ const gameBar = createGameBar(
   },
 );
 gameBar.setGame(profile.id, character ? pick(character.name, getLang()) : undefined);
-const stageView = createStageView(gameRoot);
-const moveMeterView = createMoveMeterView(gameRoot);
+const frameMeterView = createFrameMeterView(gameRoot);
 const tabBar = document.createElement('nav');
 tabBar.className = 'tabs';
 gameRoot.append(tabBar);
-const meterView = createInputMeterView(gameRoot, (mode) => {
-  meter = setMeterMode(meter, mode);
-  meterView.render(meter);
-});
 const renderHistory = createHistoryView(gameRoot);
 const practicePane = document.createElement('div');
 practicePane.className = 'tab-pane';
@@ -193,8 +187,6 @@ const keyConfig = createKeyConfig(gameRoot, profile, bindings, keyboard);
 
 type Tab = 'practice' | 'combo';
 let activeTab: Tab = 'practice';
-/** 入力のフレームメーター。モードは保存せず、開くたびに「ボタンで止める」 */
-let meter: MeterState = INITIAL_METER;
 const tabDefs: readonly (readonly [Tab, string, HTMLElement])[] = [
   ['practice', msg().tabPractice, practicePane],
   ['combo', msg().tabCombo, comboPane],
@@ -255,8 +247,6 @@ const screens = createScreens(app, {
       gate = gateEnterGame(gate, performance.now());
       // 前の練習の入力が残らないよう、履歴をニュートラルの 1 フレームにする
       history.splice(0, history.length, { dir: 5, buttons: [] });
-      meter = INITIAL_METER;
-      meterView.render(meter);
       resetFighter();
     }
   },
@@ -377,6 +367,17 @@ function refreshPad(): void {
   }
 }
 
+/** 帯が変わったとき、技の文を帯の starts に合わせる（決まりは syncMoveTexts。文は技が始まったときに 1 回だけ作る） */
+function updateMoveTexts(before: FrameMeterState): void {
+  const current = fighter;
+  const texts = syncMoveTexts(moveTexts, before, frameMeter, (move) =>
+    current === null ? move.input : msg().moveMeterText(moveDisplayName(move, current.character, profile, getLang()), move),
+  );
+  if (texts === moveTexts) return;
+  moveTexts = texts;
+  movesLine = msg().frameMeterMoves(texts);
+}
+
 function stepFrame(end: number): void {
   // キーボードとパッドは OR で合成
   const { pressed, fresh, downTimes } = keyboard.sample(end);
@@ -414,21 +415,13 @@ function stepFrame(end: number): void {
     if (result) panel.showResult(result);
   }
   frame++;
-  // 練習画面の外では、棒人間と技のメーターも進めない（入ると最初に戻す）
+  // 練習画面の外では、キャラも帯も進めない（入ると最初に戻すので、外の入力は残らない）
   if (screens.current() === 'game') {
     const before = fighterState;
     fighterState = stepFighter(before, history, fighter, profile, profile.inputBuffer);
-    if (fighterState.phase === 'startup' && fighterState.frame === 0 && fighterState.move !== null && fighter !== null) {
-      const m = fighterState.move;
-      shownMoveText = msg().moveMeterText(moveDisplayName(m, fighter.character, profile, getLang()), m);
-    }
-    moveMeter = stepMoveMeter(moveMeter, before, fighterState);
-  }
-  // 練習画面の外では、見えないメーターを進めない（入ると空に戻すので、外の入力は残らない）
-  const nextMeter = screens.current() === 'game' ? stepMeter(meter, history) : meter;
-  if (nextMeter !== meter) {
-    meter = nextMeter;
-    meterView.render(meter);
+    const prevMeter = frameMeter;
+    frameMeter = stepFrameMeter(prevMeter, before, fighterState, history);
+    if (frameMeter !== prevMeter) updateMoveTexts(prevMeter);
   }
   renderHistory(compressHistory(history, HISTORY_ROWS));
 }
@@ -449,19 +442,13 @@ function loop(): void {
     history.splice(0, history.length, ...historyAfterStall(history));
     renderHistory(compressHistory(history, HISTORY_ROWS));
     comboPanel.invalidate(msg().stalled);
-    // 止まる前後の入力がつながらないよう、技の途中なら帯を止めて棒人間を最初に戻す
-    moveMeter = stepMoveMeter(moveMeter, fighterState, INITIAL_FIGHTER);
+    // 止まる前後の入力がつながらないよう、積んでいる途中なら帯を止めてキャラを最初に戻す
+    frameMeter = stopFrameMeter(frameMeter);
     fighterState = INITIAL_FIGHTER;
     metrics.onStall();
   }
-  // 描くのは練習画面にいるときだけ。どちらも、前と同じ中身なら何もしない
-  if (screens.current() === 'game') {
-    stageView.render(fighterState, (fighter?.data.jump ?? DEFAULT_JUMP).air);
-    moveMeterView.render(
-      moveMeter,
-      fighter === null ? msg().moveMeterNoCharacter : (shownMoveText ?? msg().moveMeterIdle),
-    );
-  }
+  // 描くのは練習画面にいるときだけ。前と同じ中身なら何もしない
+  if (screens.current() === 'game') frameMeterView.render(frameMeter, movesLine, fighter === null);
   metrics.onRaf(now, due.frameEnds.length, due.stalled);
   requestAnimationFrame(loop);
 }
