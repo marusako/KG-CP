@@ -63,6 +63,7 @@ textarea { display: block; margin: 12px 0 8px; background: #15171c; color: inher
 .menu-item:disabled { color: #666; cursor: not-allowed; background: #1f222a; }
 .volume-row { display: flex; gap: 12px; align-items: center; background: #2c303a; border-radius: 4px; }
 .volume-row input { flex: 1; }
+.volume-row button.active { background: #3a5a9a; }
 .volume-value { min-width: 3ch; text-align: right; font-variant-numeric: tabular-nums; }
 .menu-back { margin-top: 8px; }
 .screen p { margin: 12px 0; }

@@ -1,3 +1,4 @@
+import { msg } from '../i18n/messages';
 import { histogram, RafMeter, Ring, summarize } from '../core/stats';
 
 export interface MetricsPanel {
@@ -19,7 +20,7 @@ export function createMetricsPanel(root: HTMLElement): MetricsPanel {
   const label = document.createElement('label');
   const check = document.createElement('input');
   check.type = 'checkbox';
-  label.append(check, ' 計測');
+  label.append(check, msg().metricsLabel);
   const body = document.createElement('pre');
   body.hidden = true;
   box.append(label, body);
@@ -39,16 +40,13 @@ export function createMetricsPanel(root: HTMLElement): MetricsPanel {
     const iv = summarize(raf.intervals());
     const k = summarize(keyLat.values());
     const p = summarize(padInt.values());
+    const m = msg();
     const lines = [
-      `1回の描画で進んだフレーム数: 0 → ${pct(0)} / 1 → ${pct(1)} / 2 → ${pct(2)} / 3以上 → ${pct(3)}`,
-      iv ? `描画の間隔: 平均 ${fmt(iv.mean)} ms（${fmt(1000 / iv.mean)} Hz）` : '描画の間隔: -',
-      k ? `キー入力から判定までの遅れ: 平均 ${fmt(k.mean)} ms / 最大 ${fmt(k.max)} ms` : 'キー入力から判定までの遅れ: -',
-      !padPresent
-        ? 'パッドの更新間隔: パッドなし'
-        : p
-          ? `パッドの更新間隔: 平均 ${fmt(p.mean)} ms / 最大 ${fmt(p.max)} ms`
-          : 'パッドの更新間隔: -',
-      `停止の検出回数: ${stalls}`,
+      m.metricsSteps(pct(0), pct(1), pct(2), pct(3)),
+      iv ? m.metricsInterval(fmt(iv.mean), fmt(1000 / iv.mean)) : m.metricsIntervalNone,
+      k ? m.metricsKey(fmt(k.mean), fmt(k.max)) : m.metricsKeyNone,
+      !padPresent ? m.metricsPadAbsent : p ? m.metricsPad(fmt(p.mean), fmt(p.max)) : m.metricsPadNone,
+      m.metricsStalls(stalls),
     ];
     body.textContent = lines.join('\n');
   };

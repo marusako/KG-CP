@@ -30,7 +30,9 @@ function cmdOf(c: CharacterData, id: string): CommandDef {
   return r;
 }
 const shapeOf = (c: CommandDef) => {
-  const { id: _id, name: _name, buttons: _buttons, ...rest } = c as CommandDef & Record<string, unknown>;
+  // searchNames（検索用の別名、第7段階のレビュー後に追加）は、方向と猶予の比べ方には関係しないので外す
+  const { id: _id, name: _name, buttons: _buttons, searchNames: _searchNames, ...rest } = c as CommandDef &
+    Record<string, unknown>;
   return rest;
 };
 function readCommand(c: CharacterData, text: string): CommandDef {
@@ -39,26 +41,28 @@ function readCommand(c: CharacterData, text: string): CommandDef {
   return r.input.command;
 }
 
-const CAMMY_MOVES: [string, string, string[], 'special' | 'super'][] = [
-  ['cammy-spiral-arrow', 'Spiral Arrow', ['236K'], 'special'],
-  ['cammy-cannon-spike', 'Cannon Spike', ['623K'], 'special'],
-  ['cammy-quick-spin-knuckle', 'Quick Spin Knuckle', ['214P'], 'special'],
-  ['cammy-cannon-strike', 'Cannon Strike', ['214K'], 'special'],
-  ['cammy-hooligan', 'Hooligan Combination', ['236P'], 'special'],
-  ['cammy-sa1', 'Spin Drive Smasher', ['236236K'], 'super'],
-  ['cammy-sa2', 'Killer Bee Assault', ['214214P'], 'super'],
-  ['cammy-sa3', 'Delta Red Assault', ['236236P'], 'super'],
+type MoveRow = [string, { en: string; ja?: string }, string[], 'special' | 'super'];
+const CAMMY_MOVES: MoveRow[] = [
+  ['cammy-spiral-arrow', { en: 'Spiral Arrow', ja: 'スパイラルアロー' }, ['236K'], 'special'],
+  ['cammy-cannon-spike', { en: 'Cannon Spike', ja: 'キャノンスパイク' }, ['623K'], 'special'],
+  ['cammy-quick-spin-knuckle', { en: 'Quick Spin Knuckle', ja: 'アクセルスピンナックル' }, ['214P'], 'special'],
+  ['cammy-cannon-strike', { en: 'Cannon Strike', ja: 'キャノンストライク' }, ['214K'], 'special'],
+  ['cammy-hooligan', { en: 'Hooligan Combination', ja: 'フーリガンコンビネーション' }, ['236P'], 'special'],
+  ['cammy-sa1', { en: 'Spin Drive Smasher', ja: 'スピンドライブスマッシャー' }, ['236236K'], 'super'],
+  ['cammy-sa2', { en: 'Killer Bee Spin', ja: 'キラービースピン' }, ['214214P'], 'super'],
+  ['cammy-sa3', { en: 'Delta Red Assault', ja: 'デルタレッドアサルト' }, ['236236P'], 'super'],
 ];
-const BRIDGET_MOVES: [string, string, string[], 'special' | 'super'][] = [
-  ['bridget-kick-start', 'Kick Start My Heart', ['236K'], 'special'],
-  ['bridget-roger-dive', 'Roger Dive', ['236K'], 'special'],
-  ['bridget-stop-and-dash-send', 'Stop and Dash（往き）', ['236S', '236HS'], 'special'],
-  ['bridget-stop-and-dash-return', 'Stop and Dash（戻り）', ['214S', '214HS'], 'special'],
-  ['bridget-rolling-movement', 'Rolling Movement', ['214K'], 'special'],
-  ['bridget-starship', 'Starship', ['623P'], 'special'],
-  ['bridget-rock-the-baby', 'Rock the Baby', ['632146P'], 'special'],
-  ['bridget-loop-the-loop', 'Loop the Loop', ['632146S'], 'super'],
-  ['bridget-killing-machine', 'Return of the Killing Machine', ['632146HS'], 'super'],
+// ブリジットの日本語名は確かめられた出典がないので ja なし（英語名を出す）
+const BRIDGET_MOVES: MoveRow[] = [
+  ['bridget-kick-start', { en: 'Kick Start My Heart' }, ['236K'], 'special'],
+  ['bridget-roger-dive', { en: 'Roger Dive' }, ['236K'], 'special'],
+  ['bridget-stop-and-dash-send', { en: 'Stop and Dash (Hit on Send)' }, ['236S', '236HS'], 'special'],
+  ['bridget-stop-and-dash-return', { en: 'Stop and Dash (Hit on Return)' }, ['214S', '214HS'], 'special'],
+  ['bridget-rolling-movement', { en: 'Rolling Movement' }, ['214K'], 'special'],
+  ['bridget-starship', { en: 'Starship' }, ['623P'], 'special'],
+  ['bridget-rock-the-baby', { en: 'Rock the Baby' }, ['632146P'], 'special'],
+  ['bridget-loop-the-loop', { en: 'Loop the Loop' }, ['632146S'], 'super'],
+  ['bridget-killing-machine', { en: 'Return of the Killing Machine' }, ['632146HS'], 'super'],
 ];
 
 type Join = 'link' | 'cancel' | undefined;
@@ -78,18 +82,18 @@ const BRIDGET_COMBOS: [string, string, [string, Join][]][] = [
 describe('CHARACTERS (第6段階 受け入れ条件 2)', () => {
   it('キャラは 2 人。キャミィ(sf6)とブリジット(ggst)', () => {
     expect(CHARACTERS.map((c) => [c.id, c.game, c.name])).toEqual([
-      ['cammy', 'sf6', 'キャミィ'],
-      ['bridget', 'ggst', 'ブリジット'],
+      ['cammy', 'sf6', { en: 'Cammy', ja: 'キャミィ' }],
+      ['bridget', 'ggst', { en: 'Bridget', ja: 'ブリジット' }],
     ]);
   });
 
-  const tables: [string, [string, string, string[], 'special' | 'super'][], [string, string, [string, Join][]][]][] = [
+  const tables: [string, MoveRow[], [string, string, [string, Join][]][]][] = [
     ['cammy', CAMMY_MOVES, CAMMY_COMBOS],
     ['bridget', BRIDGET_MOVES, BRIDGET_COMBOS],
   ];
   for (const [cid, moves, combos] of tables) {
     describe(cid, () => {
-      it('技の id・名前・入力・種類が表のとおり(順も同じ)', () => {
+      it('技の id・名前(英語と日本語)・入力・種類が表のとおり(順も同じ)', () => {
         const c = character(cid);
         expect(c.moves.map((m) => [m.id, m.name, [...m.inputs], m.kind])).toEqual(moves);
       });
@@ -97,7 +101,7 @@ describe('CHARACTERS (第6段階 受け入れ条件 2)', () => {
       it('コンボの id・名前・手・つなぎ方が表のとおり', () => {
         const c = character(cid);
         expect(
-          c.combos.map((x) => [x.id, x.name, x.steps.map((s) => [s.input, s.join])]),
+          c.combos.map((x) => [x.id, x.name.en, x.steps.map((s) => [s.input, s.join])]),
         ).toEqual(combos.map(([id, name, steps]) => [id, name, steps.map(([i, j]) => [i, j])]));
       });
 
@@ -135,6 +139,28 @@ describe('CHARACTERS (第6段階 受け入れ条件 2)', () => {
     expect(move(character('bridget'), 'bridget-rock-the-baby').note).toBeTruthy();
   });
 
+  it('キャミィの SA2 の英語名は Killer Bee Spin（Killer Bee Assault は誤り）', () => {
+    expect(move(character('cammy'), 'cammy-sa2').name.en).toBe('Killer Bee Spin');
+  });
+
+  it('ブリジットの技名には ja がない', () => {
+    for (const m of character('bridget').moves) expect(m.name.ja, m.id).toBeUndefined();
+  });
+
+  it('キャミィの技名は全部 ja がある', () => {
+    for (const m of character('cammy').moves) expect(m.name.ja, m.id).toBeTruthy();
+  });
+
+  it('注記のある技は、ja と en の両方の注記がある', () => {
+    for (const c of CHARACTERS) {
+      for (const m of c.moves) {
+        if (m.note === undefined) continue;
+        expect(m.note.ja, `${m.id} の ja`).toBeTruthy();
+        expect(m.note.en, `${m.id} の en`).toBeTruthy();
+      }
+    }
+  });
+
   it('技の id は全キャラを通して重ならない', () => {
     const ids = CHARACTERS.flatMap((c) => c.moves.map((m) => m.id));
     expect(new Set(ids).size).toBe(ids.length);
@@ -148,8 +174,8 @@ describe('charactersFor / findCharacter', () => {
   });
 
   it('findCharacter はゲームと id が合うときだけ返す', () => {
-    expect(findCharacter('sf6', 'cammy')?.name).toBe('キャミィ');
-    expect(findCharacter('ggst', 'bridget')?.name).toBe('ブリジット');
+    expect(findCharacter('sf6', 'cammy')?.name).toEqual({ en: 'Cammy', ja: 'キャミィ' });
+    expect(findCharacter('ggst', 'bridget')?.name).toEqual({ en: 'Bridget', ja: 'ブリジット' });
     expect(findCharacter('ggst', 'cammy')).toBeUndefined();
     expect(findCharacter('sf6', 'bridget')).toBeUndefined();
     expect(findCharacter('sf6', 'nobody')).toBeUndefined();
@@ -159,20 +185,34 @@ describe('charactersFor / findCharacter', () => {
 });
 
 describe('moveToCommand (第6段階 受け入れ条件 3)', () => {
-  it('Stop and Dash（往き）は buttons ["S","HS"]、方向は 236 と同じ、名前は「名前 (入力・入力)」', () => {
+  it('Stop and Dash (Hit on Send) は buttons ["S","HS"]、方向は 236 と同じ、名前は「名前 (入力・入力)」', () => {
     const b = character('bridget');
     const c = cmdOf(b, 'bridget-stop-and-dash-send');
     expect([...c.buttons]).toEqual(['S', 'HS']);
     expect(shapeOf(c)).toEqual(shapeOf(readCommand(b, '236S')));
     expect(c.id).toBe('bridget-stop-and-dash-send');
-    expect(c.name).toBe('Stop and Dash（往き） (236S・236HS)');
+    expect(c.name).toBe('Stop and Dash (Hit on Send) (236S・236HS)');
   });
 
-  it('入力が 1 つなら名前は「Spiral Arrow (236K)」、id は技の id', () => {
+  it('入力が 1 つなら名前は「スパイラルアロー (236K)」（初めの言語は ja）、id は技の id', () => {
     const c = cmdOf(character('cammy'), 'cammy-spiral-arrow');
     expect(c.id).toBe('cammy-spiral-arrow');
-    expect(c.name).toBe('Spiral Arrow (236K)');
+    expect(c.name).toBe('スパイラルアロー (236K)');
     expect([...c.buttons].sort()).toEqual(['HK', 'LK', 'MK']);
+  });
+
+  it('言語を渡すと名前が変わる: en は Spiral Arrow (236K)、ja は スパイラルアロー (236K)', () => {
+    const c = character('cammy');
+    const m = move(c, 'cammy-spiral-arrow');
+    expect(moveToCommand(m, rulesOf(c), 'en')?.name).toBe('Spiral Arrow (236K)');
+    expect(moveToCommand(m, rulesOf(c), 'ja')?.name).toBe('スパイラルアロー (236K)');
+  });
+
+  it('ブリジットは ja でも英語名: Kick Start My Heart (236K)', () => {
+    const b = character('bridget');
+    const m = move(b, 'bridget-kick-start');
+    expect(moveToCommand(m, rulesOf(b), 'ja')?.name).toBe('Kick Start My Heart (236K)');
+    expect(moveToCommand(m, rulesOf(b), 'en')?.name).toBe('Kick Start My Heart (236K)');
   });
 
   it('Cannon Spike の buttonWindow は 623 と同じ 6', () => {
@@ -197,12 +237,12 @@ describe('moveToCommand (第6段階 受け入れ条件 3)', () => {
   });
 
   it('読めない入力の技は null', () => {
-    const bad: MoveData = { id: 'x', name: 'X', inputs: ['abc'], kind: 'special' };
+    const bad: MoveData = { id: 'x', name: { en: 'X' }, inputs: ['abc'], kind: 'special' };
     expect(moveToCommand(bad, PROFILES.sf6)).toBeNull();
   });
 
   it('ゲームに合わないボタンの入力は null (GG のルールで 236K は読めるが、236LP は読めない)', () => {
-    const bad: MoveData = { id: 'x', name: 'X', inputs: ['236LP'], kind: 'special' };
+    const bad: MoveData = { id: 'x', name: { en: 'X' }, inputs: ['236LP'], kind: 'special' };
     expect(moveToCommand(bad, PROFILES.ggst)).toBeNull();
   });
 });
@@ -252,7 +292,7 @@ describe('comboToRecipe (第6段階 受け入れ条件 4)', () => {
   });
 
   it('読めない手を含むコンボは null', () => {
-    const bad = { id: 'x', name: 'X', source: 's', steps: [{ input: '5S' }, { input: 'abc', join: 'cancel' as const }] };
+    const bad = { id: 'x', name: { en: 'X' }, source: 's', steps: [{ input: '5S' }, { input: 'abc', join: 'cancel' as const }] };
     expect(comboToRecipe(bad, PROFILES.ggst)).toBeNull();
   });
 });
@@ -268,7 +308,7 @@ describe('キャラを足すときの守り（第6段階 レビューの提案 D
   });
 
   it('入力ごとに方向が違う技は null（ボタンだけ違うものしかまとめない）', () => {
-    const mixed: MoveData = { id: 'x', name: 'X', inputs: ['236S', '214S'], kind: 'special' };
+    const mixed: MoveData = { id: 'x', name: { en: 'X' }, inputs: ['236S', '214S'], kind: 'special' };
     expect(moveToCommand(mixed, PROFILES.ggst)).toBeNull();
   });
 

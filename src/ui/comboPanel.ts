@@ -1,3 +1,4 @@
+import { msg } from '../i18n/messages';
 import { initialTrialState, isAttemptInProgress, parseRecipe, stepTrial } from '../core/combo';
 import type { ComboRecipe, TrialEvent, TrialState } from '../core/combo';
 import { comboToRecipe } from '../core/characters';
@@ -16,14 +17,14 @@ export function describeDrop(
   switch (e.reason) {
     case 'early': {
       const w = recipe.steps[e.stepIndex]?.window;
-      return `早い（あと ${(w?.min ?? 0) - inputBuffer - e.offset}F 遅く）`;
+      return msg().dropEarly((w?.min ?? 0) - inputBuffer - e.offset);
     }
     case 'late': {
       const w = recipe.steps[e.stepIndex]?.window;
-      return `遅い（窓は ${w?.min}〜${w?.max}F）`;
+      return msg().dropLate(w?.min ?? 0, w?.max ?? 0);
     }
     case 'wrong':
-      return '違う入力';
+      return msg().dropWrong;
   }
 }
 
@@ -35,7 +36,7 @@ export function describeHit(offset: number | null, window: { min: number; max: n
   if (offset === null) return 'OK';
   const shown = `${offset >= 0 ? '+' : ''}${offset}F`;
   const min = window?.min ?? 0;
-  return offset < min ? `${shown}（先行 ${min - offset}F）` : shown;
+  return offset < min ? msg().hitBuffered(shown, min - offset) : shown;
 }
 
 function toJson(r: ComboRecipe): string {
@@ -110,8 +111,8 @@ export function createComboPanel(
 ): ComboPanel {
   const section = document.createElement('section');
   const title = document.createElement('h2');
-  title.textContent = 'コンボトライアル';
-  const search = createSearchInput('名前・表記で絞り込み（例: 623、2LK）');
+  title.textContent = msg().comboTitle;
+  const search = createSearchInput(msg().comboSearchPlaceholder);
   const list = document.createElement('div');
   list.className = 'command-list';
   const listNote = document.createElement('div');
@@ -125,12 +126,12 @@ export function createComboPanel(
   const jsonArea = document.createElement('textarea');
   jsonArea.rows = 8;
   jsonArea.cols = 40;
-  jsonArea.placeholder = 'レシピの JSON をここに貼り付け';
+  jsonArea.placeholder = msg().comboJsonPlaceholder;
   const jsonButtons = document.createElement('div');
   const loadBtn = document.createElement('button');
-  loadBtn.textContent = 'JSON を読み込む';
+  loadBtn.textContent = msg().comboLoadJson;
   const exportBtn = document.createElement('button');
-  exportBtn.textContent = 'JSON に書き出す';
+  exportBtn.textContent = msg().comboExportJson;
   jsonButtons.append(loadBtn, exportBtn);
   const message = document.createElement('div');
   message.className = 'note';
@@ -149,7 +150,7 @@ export function createComboPanel(
   /** 手ごとの表示状態 */
   let marks: ({ kind: 'hit'; offset: number | null } | { kind: 'drop'; text: string } | null)[] = [];
 
-  const idleText = () => '最初の手を入力してください';
+  const idleText = () => msg().comboIdle;
 
   const renderSteps = () => {
     stepsView.replaceChildren(
@@ -166,7 +167,7 @@ export function createComboPanel(
         sub.className = 'note';
         if (mark?.kind === 'hit') sub.textContent = describeHit(mark.offset, s.window);
         else if (mark?.kind === 'drop') sub.textContent = mark.text;
-        else sub.textContent = s.window ? `${s.window.min}〜${s.window.max}F` : '開始';
+        else sub.textContent = s.window ? msg().comboWindow(s.window.min, s.window.max) : msg().comboStart;
         box.append(name, sub);
         return box;
       }),
@@ -175,7 +176,7 @@ export function createComboPanel(
 
   const renderStats = () => {
     const rate = attempts === 0 ? '-' : `${Math.round((completes / attempts) * 100)}%`;
-    stats.textContent = `挑戦 ${attempts} 回 / 完走 ${completes} 回 / 完走率 ${rate}`;
+    stats.textContent = msg().comboStats(attempts, completes, rate);
   };
 
   const reset = () => {
@@ -192,7 +193,7 @@ export function createComboPanel(
     if (shown.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'note';
-      empty.textContent = '当たるコンボがありません';
+      empty.textContent = msg().comboNoMatch;
       list.replaceChildren(empty);
       return;
     }
@@ -220,7 +221,7 @@ export function createComboPanel(
       json = JSON.parse(jsonArea.value);
     } catch (e) {
       message.className = 'note error';
-      message.textContent = `JSON として読めません: ${e instanceof Error ? e.message : String(e)}`;
+      message.textContent = msg().jsonUnreadable(e instanceof Error ? e.message : String(e));
       return;
     }
     const r = parseRecipe(json, profile);
@@ -232,7 +233,7 @@ export function createComboPanel(
     const at = recipes.findIndex((x) => x.id === r.recipe.id);
     if (at >= 0 && at < samples.length) {
       message.className = 'note error';
-      message.textContent = `id「${r.recipe.id}」は内蔵サンプルと重なっています。別の id にしてください`;
+      message.textContent = msg().idCollision(r.recipe.id);
       return;
     }
     if (at >= 0) recipes[at] = r.recipe;
@@ -243,8 +244,8 @@ export function createComboPanel(
     const ok = save(profile, characterId, recipes.slice(samples.length), saved.unreadable);
     message.className = 'note';
     message.textContent = ok
-      ?`「${r.recipe.name}」を読み込みました`
-      : `「${r.recipe.name}」を読み込みました（ブラウザへの保存はできませんでした）`;
+      ? msg().recipeLoaded(r.recipe.name)
+      : msg().recipeLoadedNotSaved(r.recipe.name);
     renderStats();
     reset();
     renderList();
@@ -253,7 +254,7 @@ export function createComboPanel(
   exportBtn.addEventListener('click', () => {
     jsonArea.value = toJson(current);
     message.className = 'note';
-    message.textContent = '選んでいるレシピを書き出しました';
+    message.textContent = msg().recipeExported;
   });
 
   search.addEventListener('input', renderList);
@@ -267,7 +268,7 @@ export function createComboPanel(
     samples = character
       ? character.combos.flatMap((c) => comboToRecipe(c, next) ?? [])
       : next.samples;
-    listNote.textContent = character ? 'キャラのコンボの窓は仮の値です' : '';
+    listNote.textContent = character ? msg().comboCharacterNote : '';
     search.value = '';
     saved = loadSaved(next, characterId, new Set(samples.map((s) => s.id)));
     recipes = [...samples, ...saved.recipes];
@@ -277,7 +278,7 @@ export function createComboPanel(
     jsonArea.value = '';
     if (saved.unreadable.length > 0) {
       message.className = 'note error';
-      message.textContent = `読めなかった保存レシピが ${saved.unreadable.length} 件あります（データは消さずに残しています）`;
+      message.textContent = msg().unreadableSaved(saved.unreadable.length);
     } else {
       message.className = 'note';
       message.textContent = '';
@@ -313,16 +314,16 @@ export function createComboPanel(
         if (e.type === 'complete') {
           completes++;
           result.className = 'result ok';
-          result.textContent = '完走！';
+          result.textContent = msg().comboComplete;
         } else {
           result.className = 'result';
-          result.textContent = `${e.stepIndex + 1}手目 成功`;
+          result.textContent = msg().comboStepOk(e.stepIndex + 1);
         }
       } else {
         const text = describeDrop(e, current, profile.inputBuffer);
         marks[e.stepIndex] = { kind: 'drop', text };
         result.className = 'result ng';
-        result.textContent = `${e.stepIndex + 1}手目 失敗: ${text}`;
+        result.textContent = msg().comboStepFail(e.stepIndex + 1, text);
       }
       renderStats();
       renderSteps();

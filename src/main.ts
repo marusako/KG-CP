@@ -1,4 +1,7 @@
 import './ui/style.css';
+import { getLang, langFromBrowser, setLang, type Lang } from './i18n/lang';
+import { msg } from './i18n/messages';
+import { pick } from './i18n/localized';
 import { analyzeAttempt } from './core/detect';
 import { compressHistory, historyAfterStall } from './core/history';
 import { createFrameClock, dueFrames, type FrameClock } from './core/clock';
@@ -39,31 +42,55 @@ const MAX_FRAMES = 600;
 const HISTORY_ROWS = 20;
 /** 一度に進めるフレーム数の上限（0.5 秒）。超えたら処理が止まっていたとみなす */
 const MAX_CATCHUP = 30;
-const STALL_MESSAGE = '処理が止まったため、この挑戦は無効です';
+/** 言語を変えて読み直したあと、設定画面を開くための印（1 回だけ使う） */
+const REOPEN_SETTINGS_KEY = 'kgcp.reopenSettings';
 
-const app = document.getElementById('app');
-if (!app) throw new Error('#app が見つかりません');
-
-const keyboard = new KeyboardReader(window);
-const metrics = createMetricsPanel(document.body);
-
+/** 保存がないとき（初めて開いたとき）の言語は、ブラウザの言語から決める */
 function loadSettings(): Settings {
+  const fallbackLang = langFromBrowser(navigator.language);
   try {
-    return parseSettings(localStorage.getItem(SETTINGS_KEY));
+    return parseSettings(localStorage.getItem(SETTINGS_KEY), fallbackLang);
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return { ...DEFAULT_SETTINGS, lang: fallbackLang };
   }
 }
 
-function saveSettings(s: Settings): void {
+/** 保存できたら true。localStorage が使えなくても動作は続ける */
+function saveSettings(s: Settings): boolean {
   try {
     localStorage.setItem(SETTINGS_KEY, serializeSettings(s));
+    return true;
   } catch {
-    // localStorage が使えなくても動作は続ける
+    return false;
   }
 }
 
 let settings = loadSettings();
+// 文はすべて msg() から取るので、画面を作る前に言語を決める
+setLang(settings.lang);
+document.documentElement.lang = settings.lang;
+
+const app = document.getElementById('app');
+if (!app) throw new Error(msg().appMissing);
+
+const keyboard = new KeyboardReader(window);
+const metrics = createMetricsPanel(document.body);
+
+/**
+ * 言語を変えたら保存して読み直す（画面を作り直す手間を省くため）。
+ * 保存できないと、読み直しで元の言語に戻ってしまうので、読み直さずに false を返す
+ */
+function changeLang(lang: Lang): boolean {
+  if (!saveSettings({ ...settings, lang })) return false;
+  settings = { ...settings, lang };
+  try {
+    sessionStorage.setItem(REOPEN_SETTINGS_KEY, '1');
+  } catch {
+    // 使えないときは、読み直したあとタイトルに戻る
+  }
+  location.reload();
+  return true;
+}
 
 /** いまのゲームの設定と、そのゲームのキーの割り当て */
 let profile: GameProfile = profileFor(settings.lastGame) ?? PROFILES.sf6;
@@ -76,7 +103,7 @@ let character: CharacterData | null = findCharacter(profile.id, settings.lastCha
 function practiceOf(p: GameProfile, c: CharacterData | null): { commands: CommandDef[]; notes: Map<string, string> } {
   if (c === null) return { commands: [...p.practiceCommands], notes: new Map() };
   const commands = c.moves.flatMap((m) => moveToCommand(m, p) ?? []);
-  const notes = new Map(c.moves.flatMap((m) => (m.note === undefined ? [] : [[m.id, m.note] as const])));
+  const notes = new Map(c.moves.flatMap((m) => (m.note === undefined ? [] : [[m.id, pick(m.note, getLang())] as const])));
   return { commands, notes };
 }
 
@@ -114,7 +141,7 @@ const gameBar = createGameBar(
     screens.show('title');
   },
 );
-gameBar.setGame(profile.id, character?.name);
+gameBar.setGame(profile.id, character ? pick(character.name, getLang()) : undefined);
 const tabBar = document.createElement('nav');
 tabBar.className = 'tabs';
 gameRoot.append(tabBar);
@@ -132,8 +159,8 @@ const keyConfig = createKeyConfig(gameRoot, profile, bindings, keyboard);
 type Tab = 'practice' | 'combo';
 let activeTab: Tab = 'practice';
 const tabDefs: readonly (readonly [Tab, string, HTMLElement])[] = [
-  ['practice', 'コマンド練習', practicePane],
-  ['combo', 'コンボトライアル', comboPane],
+  ['practice', msg().tabPractice, practicePane],
+  ['combo', msg().tabCombo, comboPane],
 ];
 const tabButtons = tabDefs.map(([tab, label]) => {
   const b = document.createElement('button');
@@ -161,6 +188,7 @@ const screens = createScreens(app, {
     settings = { ...settings, volume };
     saveSettings(settings);
   },
+  onLang: changeLang,
   onSelectGame: (id: GameId) => {
     settings = { ...settings, lastGame: id };
     saveSettings(settings);
@@ -169,7 +197,8 @@ const screens = createScreens(app, {
     const { [game]: _old, ...rest } = settings.lastCharacter;
     settings = { ...settings, lastCharacter: characterId === null ? rest : { ...rest, [game]: characterId } };
     saveSettings(settings);
-    gameBar.setGame(game, findCharacter(game, characterId)?.name);
+    const chosen = findCharacter(game, characterId);
+    gameBar.setGame(game, chosen ? pick(chosen.name, getLang()) : undefined);
   },
   onScreen: (screen: Screen, prev: Screen) => {
     gameRoot.hidden = screen !== 'game';
@@ -193,6 +222,19 @@ const screens = createScreens(app, {
   },
 });
 gameRoot.hidden = true;
+
+/** 言語を変えて読み直したところなら true（印は 1 回で消す）。sessionStorage が使えなければ false（タイトルのまま） */
+function takeReopenSettingsMark(): boolean {
+  try {
+    if (sessionStorage.getItem(REOPEN_SETTINGS_KEY) === null) return false;
+    sessionStorage.removeItem(REOPEN_SETTINGS_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+// 画面の切り替えは try の外で行う（そこで起きた例外を握りつぶさないため）
+if (takeReopenSettingsMark()) screens.showLanguageSetting();
 
 const history: FrameInput[] = [];
 /** 通算フレーム番号（毎フレーム 1 ずつ増える） */
@@ -350,7 +392,7 @@ function loop(): void {
     // 止まる前後の入力がつながって判定されないよう、履歴を置き換える（同じ配列を使い回す）
     history.splice(0, history.length, ...historyAfterStall(history));
     renderHistory(compressHistory(history, HISTORY_ROWS));
-    comboPanel.invalidate(STALL_MESSAGE);
+    comboPanel.invalidate(msg().stalled);
     metrics.onStall();
   }
   metrics.onRaf(now, due.frameEnds.length, due.stalled);

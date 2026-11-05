@@ -1,3 +1,6 @@
+import { LANGS, LANG_NAMES, getLang, type Lang } from '../i18n/lang';
+import { msg } from '../i18n/messages';
+import { pick } from '../i18n/localized';
 import { charactersFor } from '../core/characters';
 import { GAMES, findGame, type GameId } from '../core/games';
 import { firstEnabled, moveCursor, type MenuAction, type MenuItem } from '../core/menu';
@@ -7,10 +10,9 @@ import type { Settings } from '../core/settings';
 export type Screen = 'title' | 'gameSelect' | 'charSelect' | 'settings' | 'credits' | 'exit' | 'game';
 
 const VOLUME_STEP = 5;
+/** 設定画面の「言語」の行の位置（音量の下） */
+const LANGUAGE_ROW = 1;
 const REPO_URL = 'https://github.com/marusako/KG-CP';
-const DISCLAIMER =
-  '各ゲームの名称は、それぞれの権利者の商標または登録商標です。このアプリは非公式のファンメイドツールで、権利者とは関係ありません。';
-const EXIT_MESSAGE = 'ブラウザ版は、ここからは閉じられません。タブを閉じて終了してください';
 
 /** 「戻る」で行く先。title だけ戻れない */
 const BACK_TO: Readonly<Record<Exclude<Screen, 'game'>, Screen | null>> = {
@@ -26,6 +28,9 @@ export interface ScreensOptions {
   getSettings: () => Settings;
   /** 音量が変わった */
   onVolume: (volume: number) => void;
+  /** 言語が選ばれた（いまと同じ言語を選んだときは呼ばない） */
+  /** 言語が選ばれた。保存できず切り替えられなかったときは false を返す（設定画面に知らせを出す） */
+  onLang: (lang: Lang) => boolean;
   /** ゲームが選ばれた（画面は charSelect に切り替わる） */
   onSelectGame: (id: GameId) => void;
   /** キャラが選ばれた（null はキャラなし）。画面は game に切り替わる */
@@ -38,6 +43,8 @@ export interface Screens {
   readonly current: () => Screen;
   /** 画面を切り替える。game のときはメニューを隠す */
   readonly show: (screen: Screen) => void;
+  /** 設定画面を、カーソルを「言語」の行に合わせて開く（言語を変えて読み直したあと） */
+  readonly showLanguageSetting: () => void;
   /** メニュー操作（キーボード・パッドから）を 1 つ受ける。game のときは何もしない */
   readonly act: (action: MenuAction) => void;
   /** 1 回の読み取りで押された操作を順に受ける。途中で画面が変わったら、残りは捨てる */
@@ -70,6 +77,8 @@ export function createScreens(root: HTMLElement, opts: ScreensOptions): Screens 
   let rebuildCharSelect: () => void = () => {};
   /** 音量を delta だけ変える（設定画面を作るときに差し込む） */
   let volumeAdjust: (delta: number) => void = () => {};
+  /** 言語を次のものに切り替える（設定画面を作るときに差し込む） */
+  let langToggle: () => void = () => {};
 
   const setScreen = (next: Screen): void => {
     const prev = screen;
@@ -112,7 +121,7 @@ export function createScreens(root: HTMLElement, opts: ScreensOptions): Screens 
     page.el.append(list, ...extra);
     const backTo = BACK_TO[name];
     if (backTo !== null) {
-      const back = el('button', 'menu-back', '戻る');
+      const back = el('button', 'menu-back', msg().back);
       back.addEventListener('click', () => {
         setScreen(backTo);
       });
@@ -142,7 +151,7 @@ export function createScreens(root: HTMLElement, opts: ScreensOptions): Screens 
 
   // title
   {
-    const items: MenuItem[] = [{ label: 'ゲーム選択' }, { label: '設定' }, { label: 'EXIT' }];
+    const items: MenuItem[] = [{ label: msg().menuGameSelect }, { label: msg().menuSettings }, { label: 'EXIT' }];
     const targets: Screen[] = ['gameSelect', 'settings', 'exit'];
     const go = (i: number): void => {
       const t = targets[i];
@@ -160,7 +169,7 @@ export function createScreens(root: HTMLElement, opts: ScreensOptions): Screens 
       opts.onSelectGame(g.id);
       setScreen('charSelect');
     };
-    addPage('gameSelect', 'ゲーム選択', items, items.map((it, i) => menuButton(it, () => choose(i))), choose);
+    addPage('gameSelect', msg().menuGameSelect, items, items.map((it, i) => menuButton(it, () => choose(i))), choose);
   }
 
   // charSelect（項目は、入るたびに選んだゲームに合わせて作り直す）
@@ -174,14 +183,14 @@ export function createScreens(root: HTMLElement, opts: ScreensOptions): Screens 
       opts.onSelectCharacter(game, c?.id ?? null);
       setScreen('game');
     };
-    addPage('charSelect', 'キャラ選択', [], [], choose);
+    addPage('charSelect', msg().menuCharSelect, [], [], choose);
     const page = pages.get('charSelect') as Page;
     const list = page.el.querySelector('.menu') as HTMLElement;
     rebuildCharSelect = () => {
       const g = profileFor(opts.getSettings().lastGame)?.id ?? null;
       game = g;
       const chars = g === null ? [] : charactersFor(g);
-      page.items = [{ label: 'キャラなし（共通）' }, ...chars.map((c) => ({ label: c.name }))];
+      page.items = [{ label: msg().menuNoCharacter }, ...chars.map((c) => ({ label: pick(c.name, getLang()) }))];
       page.rows = page.items.map((it, i) => {
         const row = menuButton(it, () => choose(i));
         row.addEventListener('mouseenter', () => {
@@ -199,7 +208,7 @@ export function createScreens(root: HTMLElement, opts: ScreensOptions): Screens 
 
   // settings
   {
-    const items: MenuItem[] = [{ label: '音量' }, { label: 'クレジット' }];
+    const items: MenuItem[] = [{ label: msg().menuVolume }, { label: msg().menuLanguage }, { label: msg().menuCredits }];
     const volumeRow = el('div', 'menu-item volume-row');
     const slider = el('input');
     slider.type = 'range';
@@ -208,7 +217,7 @@ export function createScreens(root: HTMLElement, opts: ScreensOptions): Screens 
     slider.step = '1';
     slider.value = String(opts.getSettings().volume);
     const value = el('span', 'volume-value', slider.value);
-    volumeRow.append(el('span', undefined, '音量'), slider, value);
+    volumeRow.append(el('span', undefined, msg().menuVolume), slider, value);
     const setVolume = (v: number): void => {
       const clamped = Math.min(100, Math.max(0, Math.round(v)));
       slider.value = String(clamped);
@@ -222,19 +231,40 @@ export function createScreens(root: HTMLElement, opts: ScreensOptions): Screens 
     slider.addEventListener('change', () => {
       slider.blur();
     });
-    const creditsBtn = menuButton(items[1] as MenuItem, () => {
+    // 保存できずに言語を切り替えられなかったときの知らせ
+    const langError = el('div', 'note error');
+    const chooseLang = (l: Lang): void => {
+      langError.textContent = opts.onLang(l) ? '' : msg().langSaveFailed;
+    };
+    // 言語の行。ボタンで直接選べる。←→・決定では、次の言語に切り替える
+    const langRow = el('div', 'menu-item volume-row');
+    langRow.append(el('span', undefined, msg().menuLanguage));
+    for (const l of LANGS) {
+      const b = el('button', l === getLang() ? 'active' : undefined, LANG_NAMES[l]);
+      b.addEventListener('click', () => {
+        b.blur();
+        if (l !== getLang()) chooseLang(l);
+      });
+      langRow.append(b);
+    }
+    const creditsBtn = menuButton(items[2] as MenuItem, () => {
       setScreen('credits');
     });
     addPage(
       'settings',
-      '設定',
+      msg().menuSettings,
       items,
-      [volumeRow, creditsBtn],
+      [volumeRow, langRow, creditsBtn],
       (i) => {
-        if (i === 1) setScreen('credits');
+        if (i === 1) langToggle();
+        if (i === 2) setScreen('credits');
       },
-      [el('div', 'note', '効果音はまだありません')],
+      [el('div', 'note', msg().settingsNote), langError],
     );
+    langToggle = () => {
+      const next = LANGS[(LANGS.indexOf(getLang()) + 1) % LANGS.length];
+      if (next) chooseLang(next);
+    };
     volumeAdjust = (delta) => {
       setVolume(Number(slider.value) + delta);
     };
@@ -247,14 +277,14 @@ export function createScreens(root: HTMLElement, opts: ScreensOptions): Screens 
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
     const author = el('p');
-    author.append('作者: marusako');
+    author.append(msg().creditsAuthor);
     const source = el('p');
-    source.append('ソースコード: ', link);
-    addPage('credits', 'クレジット', [], [], () => {}, [author, source, el('p', 'note', DISCLAIMER)]);
+    source.append(msg().creditsSource, link);
+    addPage('credits', msg().menuCredits, [], [], () => {}, [author, source, el('p', 'note', msg().disclaimer)]);
   }
 
   // exit
-  addPage('exit', 'EXIT', [], [], () => {}, [el('p', undefined, EXIT_MESSAGE)]);
+  addPage('exit', 'EXIT', [], [], () => {}, [el('p', undefined, msg().exitMessage)]);
 
   render();
 
@@ -273,6 +303,7 @@ export function createScreens(root: HTMLElement, opts: ScreensOptions): Screens 
       case 'left':
       case 'right':
         if (screen === 'settings' && page.cursor === 0) volumeAdjust(action === 'left' ? -VOLUME_STEP : VOLUME_STEP);
+        else if (screen === 'settings' && page.cursor === 1) langToggle();
         break;
       case 'confirm':
         if (page.cursor >= 0 && !page.items[page.cursor]?.disabled) page.onConfirm(page.cursor);
@@ -288,6 +319,14 @@ export function createScreens(root: HTMLElement, opts: ScreensOptions): Screens 
   return {
     current: () => screen,
     show: setScreen,
+    showLanguageSetting: () => {
+      setScreen('settings');
+      const page = pages.get('settings');
+      if (page) {
+        page.cursor = LANGUAGE_ROW;
+        render();
+      }
+    },
     act,
     actAll: (actions) => {
       const start = screen;
@@ -310,12 +349,12 @@ export function createGameBar(root: HTMLElement, onCharSelect: () => void, onBac
   const bar = el('div', 'game-bar');
   const name = el('strong');
   const note = el('span', 'note');
-  const charSelect = el('button', undefined, 'キャラ選択へ');
+  const charSelect = el('button', undefined, msg().barCharSelect);
   charSelect.addEventListener('click', () => {
     charSelect.blur();
     onCharSelect();
   });
-  const back = el('button', undefined, 'タイトルへ');
+  const back = el('button', undefined, msg().barTitle);
   back.addEventListener('click', () => {
     back.blur();
     onBack();
@@ -327,7 +366,7 @@ export function createGameBar(root: HTMLElement, onCharSelect: () => void, onBac
     setGame: (id, characterName) => {
       const game = findGame(id)?.name ?? '';
       name.textContent = characterName === undefined ? game : `${game} / ${characterName}`;
-      note.textContent = id === 'sf6' ? '一部の猶予は公開資料の値です（2024年5月時点）' : '猶予は共通の値です';
+      note.textContent = id === 'sf6' ? msg().barNoteSf6 : msg().barNoteCommon;
     },
   };
 }

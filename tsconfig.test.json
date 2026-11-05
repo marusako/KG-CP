@@ -1,0 +1,9 @@
+{
+  // テスト用の設定。テストは Node.js の API（node:fs など）を使うので、node の型を足す。
+  // src はブラウザで動くので、tsconfig.json（node の型なし）でも型を確かめる
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["vite/client", "node"]
+  },
+  "include": ["src", "tests"]
+}

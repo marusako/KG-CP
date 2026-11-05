@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import type { Lang } from '../src/i18n/lang';
 import { DEFAULT_SETTINGS, parseSettings, serializeSettings } from '../src/core/settings';
 
 describe('DEFAULT_SETTINGS (受け入れ条件 4)', () => {
-  it('volume 80・lastGame null', () => {
-    expect(DEFAULT_SETTINGS).toEqual({ volume: 80, lastGame: null, lastCharacter: {} });
+  it('volume 80・lastGame null・lang ja', () => {
+    expect(DEFAULT_SETTINGS).toEqual({ volume: 80, lastGame: null, lastCharacter: {}, lang: 'ja' });
   });
 });
 
@@ -106,7 +107,7 @@ describe('parseSettings: 項目ごとに見る (受け入れ条件 4)', () => {
     expect(parseSettings('{"volume":25,"lastGame":"mbtl"}')).toEqual({
       volume: 25,
       lastGame: null,
-      lastCharacter: {},
+      lastCharacter: {}, lang: 'ja',
     });
   });
 
@@ -114,7 +115,7 @@ describe('parseSettings: 項目ごとに見る (受け入れ条件 4)', () => {
     expect(parseSettings('{"volume":"abc","lastGame":"ggst"}')).toEqual({
       volume: 80,
       lastGame: 'ggst',
-      lastCharacter: {},
+      lastCharacter: {}, lang: 'ja',
     });
   });
 
@@ -122,25 +123,25 @@ describe('parseSettings: 項目ごとに見る (受け入れ条件 4)', () => {
     expect(parseSettings('{"volume":10,"lastGame":"sf6","extra":1}')).toEqual({
       volume: 10,
       lastGame: 'sf6',
-      lastCharacter: {},
+      lastCharacter: {}, lang: 'ja',
     });
   });
 });
 
 describe('serializeSettings (受け入れ条件 4)', () => {
   it('文字列を返し、JSON として読める', () => {
-    const text = serializeSettings({ volume: 60, lastGame: 'sf6', lastCharacter: {} });
+    const text = serializeSettings({ volume: 60, lastGame: 'sf6', lastCharacter: {}, lang: 'ja' });
     expect(typeof text).toBe('string');
     expect(() => JSON.parse(text)).not.toThrow();
   });
 
   it('parse して戻すと同じ (往復)', () => {
     const cases = [
-      { volume: 0, lastGame: null, lastCharacter: {} },
-      { volume: 100, lastGame: 'sf6', lastCharacter: {} },
-      { volume: 37, lastGame: 'ggst', lastCharacter: {} },
-      { volume: 50, lastGame: 'sf6', lastCharacter: { sf6: 'cammy' } },
-      { volume: 50, lastGame: 'ggst', lastCharacter: { sf6: 'cammy', ggst: 'bridget' } },
+      { volume: 0, lastGame: null, lastCharacter: {}, lang: 'ja' },
+      { volume: 100, lastGame: 'sf6', lastCharacter: {}, lang: 'ja' },
+      { volume: 37, lastGame: 'ggst', lastCharacter: {}, lang: 'ja' },
+      { volume: 50, lastGame: 'sf6', lastCharacter: { sf6: 'cammy' }, lang: 'ja' },
+      { volume: 50, lastGame: 'ggst', lastCharacter: { sf6: 'cammy', ggst: 'bridget' }, lang: 'ja' },
       DEFAULT_SETTINGS,
     ] as const;
     for (const s of cases) {
@@ -156,7 +157,7 @@ describe('parseSettings: lastCharacter (第6段階 受け入れ条件 6)', () =>
     expect(parseSettings('{"volume":50,"lastGame":"sf6"}')).toEqual({
       volume: 50,
       lastGame: 'sf6',
-      lastCharacter: {},
+      lastCharacter: {}, lang: 'ja',
     });
   });
 
@@ -196,12 +197,57 @@ describe('parseSettings: lastCharacter (第6段階 受け入れ条件 6)', () =>
     expect(parseSettings('{"volume":25,"lastGame":"ggst","lastCharacter":"x"}')).toEqual({
       volume: 25,
       lastGame: 'ggst',
-      lastCharacter: {},
+      lastCharacter: {}, lang: 'ja',
     });
   });
 
   it('serializeSettings は lastCharacter も書く', () => {
-    const text = serializeSettings({ volume: 60, lastGame: 'sf6', lastCharacter: { sf6: 'cammy' } });
+    const text = serializeSettings({ volume: 60, lastGame: 'sf6', lastCharacter: { sf6: 'cammy' }, lang: 'ja' });
     expect(JSON.parse(text).lastCharacter).toEqual({ sf6: 'cammy' });
+  });
+});
+
+describe('parseSettings: lang (第7段階 受け入れ条件 8)', () => {
+  const lang = (v: string, fallback?: Lang) => parseSettings(`{"lang":${v}}`, fallback).lang;
+
+  it("'en' は 'en'、'ja' は 'ja'", () => {
+    expect(lang('"en"')).toBe('en');
+    expect(lang('"ja"', 'en')).toBe('ja');
+  });
+
+  it("lang がなければ fallbackLang（省略すると 'ja'）。前の版の保存も読める", () => {
+    expect(parseSettings('{"volume":50,"lastGame":"sf6"}').lang).toBe('ja');
+    expect(parseSettings('{"volume":50,"lastGame":"sf6"}', 'en').lang).toBe('en');
+    expect(parseSettings('{}', 'en').lang).toBe('en');
+  });
+
+  it("'fr'・数値・null・真偽値・配列は fallbackLang", () => {
+    for (const v of ['"fr"', '1', 'null', 'true', '[]', '"EN"']) {
+      expect(lang(v), v).toBe('ja');
+      expect(lang(v, 'en'), v).toBe('en');
+    }
+  });
+
+  it('保存がない・壊れているときも fallbackLang', () => {
+    expect(parseSettings(null, 'en').lang).toBe('en');
+    expect(parseSettings('{lang:', 'en').lang).toBe('en');
+    expect(parseSettings('[1]', 'en').lang).toBe('en');
+  });
+
+  it('lang だけおかしくても、ほかの項目は保存した値のまま', () => {
+    expect(parseSettings('{"volume":25,"lastGame":"ggst","lang":"fr"}', 'en')).toEqual({
+      volume: 25,
+      lastGame: 'ggst',
+      lastCharacter: {},
+      lang: 'en',
+    });
+  });
+
+  it('serializeSettings は lang も書き、往復で元に戻る（fallback と違う言語でも）', () => {
+    const s = { volume: 60, lastGame: 'sf6', lastCharacter: {}, lang: 'en' } as const;
+    expect(JSON.parse(serializeSettings(s)).lang).toBe('en');
+    expect(parseSettings(serializeSettings(s), 'ja')).toEqual(s);
+    const j = { ...s, lang: 'ja' } as const;
+    expect(parseSettings(serializeSettings(j), 'en')).toEqual(j);
   });
 });

@@ -1,3 +1,6 @@
+import { getLang, type Lang } from '../i18n/lang';
+import { pick, type LocalizedText } from '../i18n/localized';
+import { msg } from '../i18n/messages';
 import { parseRecipe } from './combo';
 import type { ComboRecipe } from './combo';
 import { parseStep } from './notation';
@@ -11,11 +14,11 @@ import type { CommandDef } from './types';
 export type MoveKind = 'special' | 'super';
 export interface MoveData {
   id: string;
-  name: string;
+  name: LocalizedText;
   /** 表記。複数のときは、方向が同じでボタンだけ違うもの（例: ['236S', '236HS']） */
   inputs: readonly string[];
   kind: MoveKind;
-  note?: string;
+  note?: LocalizedText;
 }
 export interface ComboStepData {
   input: string;
@@ -24,7 +27,7 @@ export interface ComboStepData {
 }
 export interface ComboData {
   id: string;
-  name: string;
+  name: LocalizedText;
   steps: readonly ComboStepData[];
   source: string;
 }
@@ -32,7 +35,7 @@ export interface CharacterData {
   id: string;
   game: PlayableGameId;
   /** 画面に出す名前 */
-  name: string;
+  name: LocalizedText;
   moves: readonly MoveData[];
   combos: readonly ComboData[];
 }
@@ -47,56 +50,56 @@ export const LOOSE_WINDOWS = {
 } as const;
 
 // キャミィ（スト6、クラシック操作）。
-// 出典: kakuchopurei の技表（2023-05）。SA2 だけは、Season 2 のパッチノート（2024-05-21、EventHubs の記事で確認）で
+// 英語名の出典: kakuchopurei の技表（2023-05）。日本語名の出典: AppMedia の技表（2023-07-07）。SA2 だけは、Season 2 のパッチノート（2024-05-21、EventHubs の記事で確認）で
 // K から P に変わったので P にした。
 const CAMMY: CharacterData = {
   id: 'cammy',
   game: 'sf6',
-  name: 'キャミィ',
+  name: { en: 'Cammy', ja: 'キャミィ' },
   moves: [
-    { id: 'cammy-spiral-arrow', name: 'Spiral Arrow', inputs: ['236K'], kind: 'special' },
-    { id: 'cammy-cannon-spike', name: 'Cannon Spike', inputs: ['623K'], kind: 'special' },
-    { id: 'cammy-quick-spin-knuckle', name: 'Quick Spin Knuckle', inputs: ['214P'], kind: 'special' },
+    { id: 'cammy-spiral-arrow', name: { en: 'Spiral Arrow', ja: 'スパイラルアロー' }, inputs: ['236K'], kind: 'special' },
+    { id: 'cammy-cannon-spike', name: { en: 'Cannon Spike', ja: 'キャノンスパイク' }, inputs: ['623K'], kind: 'special' },
+    { id: 'cammy-quick-spin-knuckle', name: { en: 'Quick Spin Knuckle', ja: 'アクセルスピンナックル' }, inputs: ['214P'], kind: 'special' },
     {
       id: 'cammy-cannon-strike',
-      name: 'Cannon Strike',
+      name: { en: 'Cannon Strike', ja: 'キャノンストライク' },
       inputs: ['214K'],
       kind: 'special',
-      note: '前ジャンプ中に出す技。アプリでは地上と同じに判定します',
+      note: { ja: '前ジャンプ中に出す技。アプリでは地上と同じに判定します', en: 'Performed during a forward jump. The app judges it the same as on the ground' },
     },
     {
       id: 'cammy-hooligan',
-      name: 'Hooligan Combination',
+      name: { en: 'Hooligan Combination', ja: 'フーリガンコンビネーション' },
       inputs: ['236P'],
       kind: 'special',
-      note: '派生（K など）は練習の対象外です',
+      note: { ja: '派生（K など）は練習の対象外です', en: 'Follow-ups (such as K) are not part of the practice' },
     },
-    { id: 'cammy-sa1', name: 'Spin Drive Smasher', inputs: ['236236K'], kind: 'super' },
+    { id: 'cammy-sa1', name: { en: 'Spin Drive Smasher', ja: 'スピンドライブスマッシャー' }, inputs: ['236236K'], kind: 'super' },
     {
       id: 'cammy-sa2',
-      name: 'Killer Bee Assault',
+      name: { en: 'Killer Bee Spin', ja: 'キラービースピン' },
       inputs: ['214214P'],
       kind: 'super',
-      note: 'Season 2 で K から P に変わりました',
+      note: { ja: 'Season 2 で K から P に変わりました', en: 'Changed from K to P in Season 2' },
     },
-    { id: 'cammy-sa3', name: 'Delta Red Assault', inputs: ['236236P'], kind: 'super' },
+    { id: 'cammy-sa3', name: { en: 'Delta Red Assault', ja: 'デルタレッドアサルト' }, inputs: ['236236P'], kind: 'super' },
   ],
   combos: [
     {
       id: 'cammy-combo-1',
-      name: '2LK > 2LP > 623HK',
+      name: { en: '2LK > 2LP > 623HK' },
       steps: [{ input: '2LK' }, { input: '2LP', join: 'link' }, { input: '623HK', join: 'cancel' }],
       source: 'Sportskeeda のキャミィのコンボガイド',
     },
     {
       id: 'cammy-combo-2',
-      name: '2HP > 2MP > 236HK',
+      name: { en: '2HP > 2MP > 236HK' },
       steps: [{ input: '2HP' }, { input: '2MP', join: 'link' }, { input: '236HK', join: 'cancel' }],
       source: 'SuperCombo wiki（検索結果の抜粋で確認）',
     },
     {
       id: 'cammy-combo-3',
-      name: '2MP > 214LP',
+      name: { en: '2MP > 214LP' },
       steps: [{ input: '2MP' }, { input: '214LP', join: 'cancel' }],
       source: 'SuperCombo wiki（検索結果の抜粋で確認）',
     },
@@ -104,50 +107,52 @@ const CAMMY: CharacterData = {
 };
 
 // ブリジット（GG）。
+// 日本語名は、確かめられる出典が見つからなかった（公式サイトのコマンド表は画像で読み取れなかった）ので ja を付けない。
+// ja がないときは、日本語でも英語名を出す。ゲーム内のコマンド表などで確かめた名前を、あとで足す。
 // 出典: dashfight の技表。Starship の入力は gamezo の記事（623P）。Rock the Baby は dashfight だけで確認（1 か所のみ）。
 const BRIDGET: CharacterData = {
   id: 'bridget',
   game: 'ggst',
-  name: 'ブリジット',
+  name: { en: 'Bridget', ja: 'ブリジット' },
   moves: [
     {
       id: 'bridget-kick-start',
-      name: 'Kick Start My Heart',
+      name: { en: 'Kick Start My Heart' },
       inputs: ['236K'],
       kind: 'special',
-      note: '派生の Shoot（K）・Brake（P）は練習の対象外です',
+      note: { ja: '派生の Shoot（K）・Brake（P）は練習の対象外です', en: 'The follow-ups Shoot (K) and Brake (P) are not part of the practice' },
     },
     {
       id: 'bridget-roger-dive',
-      name: 'Roger Dive',
+      name: { en: 'Roger Dive' },
       inputs: ['236K'],
       kind: 'special',
-      note: '空中で出す技。アプリでは地上と同じに判定します',
+      note: { ja: '空中で出す技。アプリでは地上と同じに判定します', en: 'Performed in the air. The app judges it the same as on the ground' },
     },
-    { id: 'bridget-stop-and-dash-send', name: 'Stop and Dash（往き）', inputs: ['236S', '236HS'], kind: 'special' },
-    { id: 'bridget-stop-and-dash-return', name: 'Stop and Dash（戻り）', inputs: ['214S', '214HS'], kind: 'special' },
+    { id: 'bridget-stop-and-dash-send', name: { en: 'Stop and Dash (Hit on Send)' }, inputs: ['236S', '236HS'], kind: 'special' },
+    { id: 'bridget-stop-and-dash-return', name: { en: 'Stop and Dash (Hit on Return)' }, inputs: ['214S', '214HS'], kind: 'special' },
     {
       id: 'bridget-rolling-movement',
-      name: 'Rolling Movement',
+      name: { en: 'Rolling Movement' },
       inputs: ['214K'],
       kind: 'special',
-      note: 'ヨーヨーを出しているときだけ出ます',
+      note: { ja: 'ヨーヨーを出しているときだけ出ます', en: 'Only usable while the yo-yo is out' },
     },
-    { id: 'bridget-starship', name: 'Starship', inputs: ['623P'], kind: 'special' },
+    { id: 'bridget-starship', name: { en: 'Starship' }, inputs: ['623P'], kind: 'special' },
     {
       id: 'bridget-rock-the-baby',
-      name: 'Rock the Baby',
+      name: { en: 'Rock the Baby' },
       inputs: ['632146P'],
       kind: 'special',
-      note: '空中でも出せます',
+      note: { ja: '空中でも出せます', en: 'Can also be performed in the air' },
     },
-    { id: 'bridget-loop-the-loop', name: 'Loop the Loop', inputs: ['632146S'], kind: 'super' },
-    { id: 'bridget-killing-machine', name: 'Return of the Killing Machine', inputs: ['632146HS'], kind: 'super' },
+    { id: 'bridget-loop-the-loop', name: { en: 'Loop the Loop' }, inputs: ['632146S'], kind: 'super' },
+    { id: 'bridget-killing-machine', name: { en: 'Return of the Killing Machine' }, inputs: ['632146HS'], kind: 'super' },
   ],
   combos: [
     {
       id: 'bridget-combo-1',
-      name: '5S > 2S > 2HS > 236K',
+      name: { en: '5S > 2S > 2HS > 236K' },
       steps: [
         { input: '5S' },
         { input: '2S', join: 'cancel' },
@@ -173,10 +178,10 @@ export function findCharacter(game: PlayableGameId, id: unknown): CharacterData 
 }
 
 /**
- * 技を練習用の CommandDef にする。id は技のもの、name は「名前 (入力)」（入力が複数なら「・」でつなぐ）。
+ * 技を練習用の CommandDef にする。id は技のもの、name は「名前 (入力)」（入力が複数なら「・」でつなぐ。名前は lang の言語。日本語名がなければ英語名）。
  * 方向と猶予は表記から読んだコマンドと同じで、buttons は inputs のボタンを合わせたもの。読めなければ null
  */
-export function moveToCommand(move: MoveData, rules: NotationRules): CommandDef | null {
+export function moveToCommand(move: MoveData, rules: NotationRules, lang: Lang = getLang()): CommandDef | null {
   let base: CommandDef | null = null;
   const buttons: string[] = [];
   for (const text of move.inputs) {
@@ -188,7 +193,10 @@ export function moveToCommand(move: MoveData, rules: NotationRules): CommandDef 
     for (const b of r.input.buttons) if (!buttons.includes(b)) buttons.push(b);
   }
   if (base === null) return null;
-  return { ...base, id: move.id, name: `${move.name} (${move.inputs.join('・')})`, buttons };
+  // 表示していない言語の名前でも探せるよう、英語名と日本語名を検索用に持たせる
+  const searchNames = move.name.ja === undefined ? [move.name.en] : [move.name.en, move.name.ja];
+  const name = `${pick(move.name, lang)} (${move.inputs.join(msg(lang).inputSep)})`;
+  return { ...base, id: move.id, name, buttons, searchNames };
 }
 
 /** コンボを ComboRecipe にする。窓は LOOSE_WINDOWS。読めなければ null */
@@ -196,7 +204,7 @@ export function comboToRecipe(combo: ComboData, rules: NotationRules): ComboReci
   const r = parseRecipe(
     {
       id: combo.id,
-      name: combo.name,
+      name: pick(combo.name, getLang()),
       steps: combo.steps.map((s, i) => {
         if (i === 0) return { input: s.input };
         const w = LOOSE_WINDOWS[s.join ?? 'cancel'];

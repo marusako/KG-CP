@@ -1,6 +1,8 @@
+import { msg } from '../i18n/messages';
 import type { HistoryEntry } from '../core/history';
 import type { Direction } from '../core/types';
 
+// 5（ニュートラル）は中黒で表す。中黒は記号なので、日本語の文字列が残っていないかのテストでは数えない
 const ARROWS: Record<Direction, string> = {
   1: '↙', 2: '↓', 3: '↘', 4: '←', 5: '・', 6: '→', 7: '↖', 8: '↑', 9: '↗',
 };
@@ -9,7 +11,7 @@ export function createHistoryView(root: HTMLElement): (entries: readonly History
   const section = document.createElement('section');
   section.className = 'history-panel';
   const title = document.createElement('h2');
-  title.textContent = '入力履歴';
+  title.textContent = msg().historyTitle;
   const list = document.createElement('div');
   section.append(title, list);
   root.append(section);

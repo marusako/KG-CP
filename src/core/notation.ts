@@ -1,3 +1,4 @@
+import { msg } from '../i18n/messages';
 import type { CommandDef, Direction } from './types';
 
 export type StepInput =
@@ -19,7 +20,7 @@ export function parseStep(
   rules: NotationRules,
 ): { ok: true; input: StepInput } | { ok: false; error: string } {
   const t = text.trim();
-  const fail = { ok: false, error: `「${t}」は読めない表記です` } as const;
+  const fail = { ok: false, error: msg().unreadableNotation(t) } as const;
   // 末尾のボタンの部分は、いちばん長く一致する名前にする（'HS' を 'S' と読み違えない）
   const name = [...rules.buttons, ...Object.keys(rules.buttonGroups)]
     .filter((n) => t.endsWith(n))

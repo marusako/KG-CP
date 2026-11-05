@@ -1,3 +1,4 @@
+import { msg } from '../i18n/messages';
 import type { GameProfile } from '../core/profiles';
 import { actionsFor, type Action, type Bindings } from './bindings';
 
@@ -15,11 +16,10 @@ export interface WizardState {
   readonly done: boolean;
 }
 
-const DIRECTION_LABELS: Readonly<Record<string, string>> = { up: '上', down: '下', left: '左', right: '右' };
-
 /** 操作の表示名。方向は「上・下・左・右」、ボタンは名前そのまま */
 export function actionName(action: Action): string {
-  return DIRECTION_LABELS[action] ?? action;
+  const labels: Readonly<Record<string, string>> = msg().dir;
+  return labels[action] ?? action;
 }
 
 export function startWizard(target: WizardTarget, profile: GameProfile): WizardState {
@@ -37,12 +37,12 @@ export function wizardPress(state: WizardState, input: string | number): WizardS
   if (state.done) return state;
   if (state.target === 'keyboard' ? typeof input !== 'string' : typeof input !== 'number') return state;
   const reject = (error: string): WizardState => ({ ...state, error });
-  if (state.target === 'keyboard' && input === 'Escape') return reject('Esc は取り消しに使うので割り当てられません');
+  if (state.target === 'keyboard' && input === 'Escape') return reject(msg().wizardEscReserved);
   if (state.target === 'pad' && typeof input === 'number' && input >= 12 && input <= 15) {
-    return reject('十字キーは方向に使うので、ボタンには割り当てられません');
+    return reject(msg().wizardDpadReserved);
   }
   const usedAt = state.picked.indexOf(input);
-  if (usedAt >= 0) return reject(`すでに ${actionName(state.actions[usedAt]!)} に使っています`);
+  if (usedAt >= 0) return reject(msg().wizardAlreadyUsed(actionName(state.actions[usedAt]!)));
   const index = state.index + 1;
   return { ...state, picked: [...state.picked, input], index, error: null, done: index >= state.actions.length };
 }

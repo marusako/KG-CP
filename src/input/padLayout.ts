@@ -1,3 +1,5 @@
+import { msg } from '../i18n/messages';
+
 export type PadFamily = 'xbox' | 'playstation' | 'unknown';
 
 /** Gamepad.id と mapping からパッドの系統を推定する。標準の配置でなければ番号の意味が決まっていないので unknown */
@@ -10,14 +12,14 @@ export function detectPadFamily(id: string, mapping: string): PadFamily {
 }
 
 const XBOX: readonly string[] = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Menu', 'LS', 'RS', '↑', '↓', '←', '→', 'Xbox'];
-const PLAYSTATION: readonly string[] = [
-  '×', '○', '□', '△', 'L1', 'R1', 'L2', 'R2', 'Create', 'Options', 'L3', 'R3', '↑', '↓', '←', '→', 'PS', 'タッチパッド',
+const PLAYSTATION = (): readonly string[] => [
+  '×', '○', '□', '△', 'L1', 'R1', 'L2', 'R2', 'Create', 'Options', 'L3', 'R3', '↑', '↓', '←', '→', 'PS', msg().touchpad,
 ];
 
 /** 標準の配置でのボタン番号の表示名。分からなければ「ボタン N」 */
 export function padButtonLabel(family: PadFamily, index: number): string {
-  const table = family === 'xbox' ? XBOX : family === 'playstation' ? PLAYSTATION : [];
-  return table[index] ?? `ボタン ${index}`;
+  const table = family === 'xbox' ? XBOX : family === 'playstation' ? PLAYSTATION() : [];
+  return table[index] ?? msg().padButtonN(index);
 }
 
 /** Gamepad.id から読みやすい名前を取り出す（Chrome は括弧より前、Firefox は先頭の ID 2 つより後）。取れなければ id のまま */

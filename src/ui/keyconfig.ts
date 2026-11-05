@@ -1,3 +1,4 @@
+import { msg } from '../i18n/messages';
 import type { Device } from '../input/activeDevice';
 import type { GameProfile } from '../core/profiles';
 import { actionsFor, assignKey, assignPad, saveBindings, type Action, type Bindings } from '../input/bindings';
@@ -29,7 +30,6 @@ type ViewMode = 'auto' | WizardTarget;
 
 const ARROWS: Readonly<Record<number, string>> = { 1: '↙', 2: '↓', 3: '↘', 4: '←', 6: '→', 7: '↖', 8: '↑', 9: '↗' };
 const PAD_DIR_BUTTONS: Readonly<Record<PadDir, number>> = { up: 12, down: 13, left: 14, right: 15 };
-const GUIDE = '操作の名前をクリックすると、その操作だけ直せます（Esc で取り消し）。';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -60,12 +60,12 @@ export function createKeyConfig(
   const missing = el('div', 'note');
   const controls = el('div', 'kc-controls');
   const note = el('div', 'note');
-  const wizardButton = el('button', undefined, 'まとめて設定');
-  const cancelButton = el('button', undefined, '取り消し');
+  const wizardButton = el('button', undefined, msg().kcWizard);
+  const cancelButton = el('button', undefined, msg().kcCancel);
   const modeButtons: readonly (readonly [ViewMode, HTMLButtonElement])[] = [
-    ['keyboard', el('button', undefined, 'キーボード')],
-    ['pad', el('button', undefined, 'パッド')],
-    ['auto', el('button', undefined, '自動')],
+    ['keyboard', el('button', undefined, msg().keyboard)],
+    ['pad', el('button', undefined, msg().pad)],
+    ['auto', el('button', undefined, msg().kcAuto)],
   ];
   tabs.append(...modeButtons.map(([, b]) => b));
   controls.append(wizardButton, cancelButton);
@@ -73,7 +73,7 @@ export function createKeyConfig(
   const padDiagram = createPadDiagram();
   const keyboardDiagram = createKeyboardDiagram();
   body.append(diagramBox, side);
-  const title = el('h2', undefined, 'キーコンフィグ');
+  const title = el('h2', undefined, msg().kcTitle);
   section.append(title, deviceLine, tabs, prompt, body, missing, controls, note);
   root.append(section);
 
@@ -85,7 +85,7 @@ export function createKeyConfig(
   let waiting: Action | null = null;
   /** 入力待ちの間、図とリストを固定する */
   let lock: WizardTarget | null = null;
-  let message = GUIDE;
+  let message = msg().kcGuide;
   let messageError = false;
   let shownSignature = '';
 
@@ -146,30 +146,28 @@ export function createKeyConfig(
     shownSignature = signature;
     const arrow = ARROWS[resolveDirection(dirs, 'neutral')] ?? '';
     const text = [arrow, ...buttons].filter((s) => s !== '').join(' + ');
-    readout.textContent = `いまの入力（${kind === 'keyboard' ? 'キーボード' : 'パッド'}）: ${text === '' ? '―' : text}`;
+    readout.textContent = msg().kcReadout(kind === 'keyboard' ? msg().keyboard : msg().pad, text === '' ? '―' : text);
   };
 
   const renderDeviceLine = (): void => {
     deviceLine.textContent =
       device.kind === 'keyboard'
-        ? '操作中: キーボード'
-        : `操作中: ${padDisplayName(device.id)}（${
-            device.family === 'xbox' ? 'Xbox 式' : device.family === 'playstation' ? 'PlayStation 式' : 'ボタン番号表示'
-          }）`;
+        ? msg().kcDeviceKeyboard
+        : msg().kcDevicePad(padDisplayName(device.id), msg().kcFamily[device.family]);
   };
 
   const renderPrompt = (): void => {
     prompt.classList.remove('error');
     if (wizard && !wizard.done) {
       const a = wizard.actions[wizard.index]!;
-      const what = wizard.target === 'keyboard' ? 'キー' : 'ボタン';
-      prompt.textContent = `${actionName(a)} に使う${what}を押してください（${wizard.index + 1}/${wizard.actions.length}）`;
+      const press = wizard.target === 'keyboard' ? msg().kcPressKey : msg().kcPressButton;
+      prompt.textContent = press(actionName(a), wizard.index + 1, wizard.actions.length);
       if (wizard.error) {
         prompt.textContent += ` ${wizard.error}`;
         prompt.classList.add('error');
       }
     } else if (waiting) {
-      prompt.textContent = `${actionName(waiting)} に使うキーかボタンを押してください`;
+      prompt.textContent = msg().kcPressEither(actionName(waiting));
     } else {
       prompt.textContent = '';
     }
@@ -182,7 +180,7 @@ export function createKeyConfig(
     renderPrompt();
     for (const [m, b] of modeButtons) b.classList.toggle('active', m === mode);
     diagramBox.replaceChildren(kind === 'keyboard' ? keyboardDiagram.svg : padDiagram.svg);
-    wizardButton.textContent = kind === 'keyboard' ? 'まとめて設定（キーボード）' : 'まとめて設定（パッド）';
+    wizardButton.textContent = kind === 'keyboard' ? msg().kcWizardKeyboard : msg().kcWizardPad;
     wizardButton.disabled = capturing();
     cancelButton.hidden = !capturing();
     const target = targetAction();
@@ -195,7 +193,9 @@ export function createKeyConfig(
     const missingKeys = actions.filter((a) => !keyboardDiagram.has(bindings.keys[a] as string));
     missing.textContent =
       kind === 'keyboard' && missingKeys.length > 0
-        ? `図にないキー: ${missingKeys.map((a) => `${keyLabel(bindings.keys[a] as string)} = ${actionName(a)}`).join('、')}`
+        ? msg().kcMissingKeys(
+            missingKeys.map((a) => `${keyLabel(bindings.keys[a] as string)} = ${actionName(a)}`).join(msg().listSep),
+          )
         : '';
 
     const family = padFamily();
@@ -241,7 +241,7 @@ export function createKeyConfig(
   const cancel = (): void => {
     if (!capturing()) return;
     stopCapture();
-    say(GUIDE);
+    say(msg().kcGuide);
     render();
   };
 
@@ -262,7 +262,7 @@ export function createKeyConfig(
         const a = waiting;
         const r = assignKey(bindings.keys, a, code);
         bindings.keys = r.keys;
-        finishSingle(r.swappedWith ? `${actionName(r.swappedWith)}と入れ替えました` : GUIDE);
+        finishSingle(r.swappedWith ? msg().kcSwapped(actionName(r.swappedWith)) : msg().kcGuide);
       }
     };
   };
@@ -276,7 +276,7 @@ export function createKeyConfig(
       bindings.pad = result.pad;
       saveBindings(profile, bindings);
       stopCapture();
-      say('設定しました');
+      say(msg().kcDone);
     }
     render();
   };
@@ -293,7 +293,7 @@ export function createKeyConfig(
     stopCapture();
     waiting = a;
     lock = viewKind();
-    say(GUIDE);
+    say(msg().kcGuide);
     armKeyboard();
     render();
   }
@@ -304,7 +304,7 @@ export function createKeyConfig(
     const target = viewKind();
     wizard = startWizard(target, profile);
     lock = target;
-    say(GUIDE);
+    say(msg().kcGuide);
     armKeyboard();
     render();
   };
@@ -345,13 +345,13 @@ export function createKeyConfig(
       }
       if (waiting === null || !isButtonAction(waiting)) return;
       if (index >= 12 && index <= 15) {
-        say('十字キーは方向に使うので、ボタンには割り当てられません', true);
+        say(msg().wizardDpadReserved, true);
         render();
         return;
       }
       const r = assignPad(bindings.pad, waiting, index);
       bindings.pad = r.pad;
-      finishSingle(r.swappedWith ? `${actionName(r.swappedWith)}と入れ替えました` : GUIDE);
+      finishSingle(r.swappedWith ? msg().kcSwapped(actionName(r.swappedWith)) : msg().kcGuide);
     },
     setDevice: (next) => {
       const changed =
@@ -369,7 +369,7 @@ export function createKeyConfig(
     setProfile: (nextProfile, nextBindings) => {
       // 捕まえ中の表示も、割り当てを変えずに元へ戻す
       stopCapture();
-      say(GUIDE);
+      say(msg().kcGuide);
       profile = nextProfile;
       bindings = nextBindings;
       render();

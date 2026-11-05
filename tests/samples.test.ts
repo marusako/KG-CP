@@ -55,7 +55,7 @@ describe('SF6_SAMPLES の中身は今と同じ (受け入れ条件 2)', () => {
     expect(SF6_SAMPLES.map(shape)).toEqual([
       {
         id: 'sample-1',
-        name: '小足2回から波動（サンプル）',
+        name: '小パン2回から波動（サンプル）', // 第7段階のレビュー後: 手は 2LP なので「小足」は誤り
         steps: [['2LP', null], ['2LP', { min: 10, max: 14 }], ['236HP', { min: 0, max: 10 }]],
       },
       {

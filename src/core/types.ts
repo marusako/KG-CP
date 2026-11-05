@@ -14,8 +14,13 @@ export interface MotionStep {
   minHold?: number;
 }
 
-export type CommandDef =
-  | {
+/** 検索だけに使う別名。キャラの技は、表示していない言語の名前も入れて、どちらの言語でも探せるようにする */
+interface Searchable {
+  searchNames?: readonly string[];
+}
+
+export type CommandDef = Searchable &
+  ({
       kind: 'motion';
       id: string;
       name: string;
@@ -39,7 +44,7 @@ export type CommandDef =
       buttons: readonly string[];
       /** ボタン押下フレームから何フレーム前まで見るか */
       motionWindow: number;
-    };
+    });
 
 export type AttemptResult =
   | { ok: true; motionFrames: number; buttonDelay: number }

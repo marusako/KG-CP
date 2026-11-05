@@ -1,3 +1,4 @@
+import { msg } from '../i18n/messages';
 import { keyLabel } from '../input/keyLabel';
 import { padButtonLabel, type PadFamily } from '../input/padLayout';
 
@@ -147,7 +148,7 @@ export interface PadDiagram {
 }
 
 export function createPadDiagram(layout: PadLayout = STANDARD_PAD_LAYOUT): PadDiagram {
-  const svg = svgEl('svg', { class: 'diagram', viewBox: layout.viewBox, role: 'img', 'aria-label': 'パッドの図' });
+  const svg = svgEl('svg', { class: 'diagram', viewBox: layout.viewBox, role: 'img', 'aria-label': msg().padDiagramLabel });
   const cells = new Map<number, Cell>();
   for (const spec of layout.cells) {
     const c = new Cell(spec);
@@ -198,7 +199,7 @@ export interface KeyboardDiagram {
 }
 
 export function createKeyboardDiagram(layout: readonly CellSpec<string>[] = KEYBOARD_LAYOUT): KeyboardDiagram {
-  const svg = svgEl('svg', { class: 'diagram keyboard', viewBox: KEYBOARD_VIEWBOX, role: 'img', 'aria-label': 'キーボードの図' });
+  const svg = svgEl('svg', { class: 'diagram keyboard', viewBox: KEYBOARD_VIEWBOX, role: 'img', 'aria-label': msg().keyboardDiagramLabel });
   const cells = new Map<string, Cell>();
   for (const spec of layout) {
     const c = new Cell(spec);

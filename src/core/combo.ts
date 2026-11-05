@@ -1,3 +1,4 @@
+import { msg } from '../i18n/messages';
 import { analyzeAttempt, justPressedAny } from './detect';
 import { parseStep } from './notation';
 import type { NotationRules, StepInput } from './notation';
@@ -36,21 +37,21 @@ const isFrameCount = (v: unknown): v is number => typeof v === 'number' && Numbe
 
 export function parseRecipe(json: unknown, rules: NotationRules): ParseResult {
   const fail = (error: string): ParseResult => ({ ok: false, error });
-  if (!isRecord(json)) return fail('レシピはオブジェクトで書いてください');
-  if (!isNonEmptyString(json.id)) return fail('id は空でない文字列にしてください');
-  if (!isNonEmptyString(json.name)) return fail('name は空でない文字列にしてください');
+  if (!isRecord(json)) return fail(msg().recipeNotObject);
+  if (!isNonEmptyString(json.id)) return fail(msg().recipeIdInvalid);
+  if (!isNonEmptyString(json.name)) return fail(msg().recipeNameInvalid);
   if (!Array.isArray(json.steps) || json.steps.length === 0) {
-    return fail('steps は 1 個以上の配列にしてください');
+    return fail(msg().recipeStepsInvalid);
   }
 
   const steps: ComboStep[] = [];
   for (let i = 0; i < json.steps.length; i++) {
     const n = i + 1;
     const raw: unknown = json.steps[i];
-    if (!isRecord(raw)) return fail(`${n}手目: オブジェクトで書いてください`);
-    if (typeof raw.input !== 'string') return fail(`${n}手目: input は文字列で書いてください`);
+    if (!isRecord(raw)) return fail(msg().stepNotObject(n));
+    if (typeof raw.input !== 'string') return fail(msg().stepInputNotString(n));
     const parsed = parseStep(raw.input, rules);
-    if (!parsed.ok) return fail(`${n}手目: ${parsed.error}`);
+    if (!parsed.ok) return fail(msg().stepError(n, parsed.error));
     const text = raw.input.trim();
 
     if (i === 0) {
@@ -59,13 +60,13 @@ export function parseRecipe(json: unknown, rules: NotationRules): ParseResult {
     }
     const w = raw.window;
     if (!Array.isArray(w) || w.length !== 2) {
-      return fail(`${n}手目: window は [min, max] の形で書いてください`);
+      return fail(msg().windowShape(n));
     }
     const [min, max] = w as unknown[];
     if (!isFrameCount(min) || !isFrameCount(max)) {
-      return fail(`${n}手目: window は 0 以上の整数で書いてください`);
+      return fail(msg().windowInts(n));
     }
-    if (min > max) return fail(`${n}手目: window は min が max 以下になるように書いてください`);
+    if (min > max) return fail(msg().windowOrder(n));
     steps.push({ text, input: parsed.input, window: { min, max } });
   }
   return { ok: true, recipe: { id: json.id, name: json.name, steps } };
