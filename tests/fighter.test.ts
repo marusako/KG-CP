@@ -370,3 +370,65 @@ describe('moveDisplayName: 技名を選んだ言語で出す（ユーザーの�
     expect(moveDisplayName(mv(bData, '236K'), bridget, PROFILES.ggst, 'en')).toBe('Kick Start My Heart (236K)');
   });
 });
+
+describe('stepFighter: 当たったときの硬直 (第13段階 受け入れ条件 3)', () => {
+  const HK: FrameInput = { dir: 5, buttons: ['HK'] };
+
+  /**
+   * 技の持続の 1 フレーム目（hitFrame）で、stepDummy がするのと同じ印（contact: true）を付けて進める。
+   * hitFrame を null にすると空振り
+   */
+  function runWithContact(inputs: FrameInput[], hitFrame: number | null): FighterState[] {
+    let s: FighterState = INITIAL_FIGHTER;
+    const history: FrameInput[] = [];
+    const out: FighterState[] = [];
+    inputs.forEach((f, i) => {
+      history.push(f);
+      s = stepFighter(s, history, cammy, SF6, 4);
+      if (i === hitFrame) s = { ...s, contact: true };
+      out.push(s);
+    });
+    return out;
+  }
+
+  it('5HK が当たると硬直は 19: 発生前 10 + 持続 3 + 硬直 19 = 32 フレーム目に idle', () => {
+    const ss = runWithContact([HK, ...rep(40, N)], 10);
+    expect(phases(ss)).toEqual(seq(['startup', 10], ['active', 3], ['recovery', 19], ['idle', 9]));
+  });
+
+  it('5HK が空振りなら硬直は 21: 10 + 3 + 21 = 34 フレーム目に idle', () => {
+    const ss = runWithContact([HK, ...rep(40, N)], null);
+    expect(phases(ss)).toEqual(seq(['startup', 10], ['active', 3], ['recovery', 21], ['idle', 7]));
+  });
+
+  it('2MP が当たると硬直は 14（空振りは 17）: 6 + 3 + 14 = 23 フレーム目に idle', () => {
+    const MP2: FrameInput = { dir: 2, buttons: ['MP'] };
+    const hit = runWithContact([MP2, ...rep(30, N)], 6);
+    expect(phases(hit)).toEqual(seq(['startup', 6], ['active', 3], ['recovery', 14], ['idle', 8]));
+    const miss = runWithContact([MP2, ...rep(30, N)], null);
+    expect(phases(miss)).toEqual(seq(['startup', 6], ['active', 3], ['recovery', 17], ['idle', 5]));
+  });
+
+  it('当たったときの硬直が空振りと同じ技（5LP）は、当たっても硬直 7 のまま', () => {
+    const ss = runWithContact([LP, ...rep(20, N)], 3);
+    expect(phases(ss)).toEqual(seq(['startup', 3], ['active', 3], ['recovery', 7], ['idle', 8]));
+  });
+
+  it('contact の印は、新しい技を出すと消える（印が付いていない状態で次の技が始まる）', () => {
+    // 5LP（0 で押す）に contact を付け、13 に 5LP をもう一度押す
+    const inputs: FrameInput[] = [LP, ...rep(30, N)];
+    inputs[13] = LP;
+    const ss = runWithContact(inputs, 3);
+    expect(ss[12]!.contact).toBe(true);
+    expect(ss[13]!.move?.input).toBe('5LP');
+    expect(ss[13]!.phase).toBe('startup');
+    expect(ss[13]!.contact).toBeUndefined();
+    expect(ss[16]!.phase).toBe('active');
+    expect(ss[16]!.contact).toBeUndefined();
+  });
+
+  it('stepFighter だけでは contact は付かない（付けるのは相手）', () => {
+    const ss = run([HK, ...rep(40, N)]);
+    expect(ss.every((s) => s.contact === undefined)).toBe(true);
+  });
+});

@@ -115,6 +115,8 @@ export interface FighterState {
   move: MoveFrames | null;
   /** 動けない間に押された技（先行入力）。動けるようになった最初のフレームで出す */
   buffered: { move: MoveFrames; age: number } | null;
+  /** いまの技が相手に当たった（付けるのは stepDummy）。新しい技を出す・動けるようになると消える。当たったあとの硬直の長さに使う */
+  contact?: true;
 }
 
 export const INITIAL_FIGHTER: FighterState = {
@@ -132,13 +134,21 @@ function isBusy(phase: FighterPhase): boolean {
   return phase !== 'idle' && phase !== 'crouch' && phase !== 'walkForward' && phase !== 'walkBack';
 }
 
-/** 技の段階の長さ */
-function moveLength(move: MoveFrames, phase: 'startup' | 'active' | 'recovery'): number {
-  return phase === 'startup' ? move.startup : phase === 'active' ? move.active : move.recovery;
+/** 技の段階の長さ。硬直は、当たったとき（contact）に長さが違う技ならその値 */
+function moveLength(move: MoveFrames, phase: 'startup' | 'active' | 'recovery', contact: boolean): number {
+  if (phase === 'startup') return move.startup;
+  if (phase === 'active') return move.active;
+  return contact ? (move.contactRecovery ?? move.recovery) : move.recovery;
+}
+
+/** contact の印を外した状態 */
+function withoutContact(state: FighterState): FighterState {
+  const { contact: _contact, ...rest } = state;
+  return rest;
 }
 
 function startMove(state: FighterState, move: MoveFrames): FighterState {
-  return { ...state, phase: 'startup', frame: 0, move, buffered: null };
+  return { ...withoutContact(state), phase: 'startup', frame: 0, move, buffered: null };
 }
 
 /** 動ける状態のとき、方向から次の状態を決める（同じなら state をそのまま返す） */
@@ -205,7 +215,7 @@ export function stepFighter(
     case 'recovery': {
       const move = state.move as MoveFrames;
       const phase = state.phase;
-      if (frame < moveLength(move, phase)) {
+      if (frame < moveLength(move, phase, state.contact === true)) {
         next = { ...state, frame };
       } else if (phase === 'startup') {
         next = { ...state, phase: 'active', frame: 0 };
@@ -218,7 +228,7 @@ export function stepFighter(
 
   // 動けるようになった最初のフレーム。先行入力があれば、そのフレームが startup の 0 フレーム目
   if (buffered !== null) return startMove(state, buffered.move);
-  return freeStep({ ...state, phase: 'idle', frame: 0, move: null, buffered: null }, dir);
+  return freeStep({ ...withoutContact(state), phase: 'idle', frame: 0, move: null, buffered: null }, dir);
 }
 
 /**

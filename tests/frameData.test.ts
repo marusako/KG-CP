@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { FIGHTER_DATA, fighterDataFor, totalFrames } from '../src/core/frameData';
+import { FIGHTER_DATA, contactReaction, fighterDataFor, totalFrames } from '../src/core/frameData';
+import type { DummyMode, MoveFrames, Reaction } from '../src/core/frameData';
 
 // [入力, 発生前, 持続, 硬直, FAT の全体]（プラン phase10-fighter.md の表）
 type Row = [string, number, number, number, number];
@@ -99,5 +100,149 @@ describe('FIGHTER_DATA (第10段階 受け入れ条件 1)', () => {
 
   it('totalFrames は 発生前 + 持続 + 硬直', () => {
     expect(totalFrames({ input: 'x', startup: 1, active: 2, recovery: 3 })).toBe(6);
+  });
+});
+
+// ---- 第13段階 受け入れ条件 1: contactReaction ----
+// L = 有利 + 持続 + 当たったときの硬直（プラン「相手の反応の長さ」）。
+// 括弧の中の数は「有利 + 持続 + 硬直」。5HK は当たったときの硬直 19、2MP は 14（空振りは 21・17）を使う
+
+const moveOf = (characterId: string, input: string): MoveFrames => {
+  const m = fighterDataFor(characterId)!.moves.find((x) => x.input === input);
+  if (!m) throw new Error(`${characterId} に ${input} がありません`);
+  return m;
+};
+
+/** 期待: null（反応なし）、または [kind, L, 有利] */
+type Expect = null | readonly [Reaction['kind'], number, number];
+type ReactionRow = [string, Expect, Expect];
+
+const CAMMY_REACTIONS: ReactionRow[] = [
+  ['5LP', ['hitstun', 15, 5], ['blockstun', 8, -2]], // 5+3+7 / -2+3+7
+  ['5MP', ['hitstun', 23, 6], ['blockstun', 16, -1]], // 6+4+13 / -1+4+13
+  ['5HP', ['hitstun', 25, 2], ['blockstun', 20, -3]], // 2+3+20 / -3+3+20
+  ['5LK', ['hitstun', 15, 2], ['blockstun', 10, -3]], // 2+3+10 / -3+3+10
+  ['5MK', ['hitstun', 24, 3], ['blockstun', 17, -4]], // 3+3+18 / -4+3+18
+  ['5HK', ['hitstun', 24, 2], ['blockstun', 19, -3]], // 2+3+19 / -3+3+19
+  ['2LP', ['hitstun', 15, 5], ['blockstun', 8, -2]], // 5+2+8 / -2+2+8
+  ['2MP', ['hitstun', 22, 5], ['blockstun', 15, -2]], // 5+3+14 / -2+3+14
+  ['2HP', ['hitstun', 26, 7], ['blockstun', 20, 1]], // 7+4+15 / 1+4+15
+  ['2LK', ['hitstun', 13, 3], ['blockstun', 8, -2]], // 3+3+7 / -2+3+7
+  ['2MK', ['hitstun', 22, 1], ['blockstun', 16, -5]], // 1+3+18 / -5+3+18
+  ['2HK', ['down', 65, 38], ['blockstun', 17, -10]], // 38+3+24 / -10+3+24
+  ['236LK', null, null],
+  ['236MK', null, null],
+  ['236HK', null, null],
+  ['623LK', ['down', 72, 20], ['blockstun', 16, -36]], // 20+12+40 / -36+12+40
+  ['623MK', ['down', 74, 21], ['blockstun', 17, -36]], // 21+12+41 / -36+12+41（ガードの L は FAT の硬直 16 と合わない技）
+  ['623HK', ['down', 78, 22], ['blockstun', 20, -36]], // 22+12+44 / -36+12+44（同上）
+  ['214LP', ['hitstun', 22, 2], ['blockstun', 17, -3]], // 2+4+16 / -3+4+16
+  ['214MP', ['hitstun', 23, 3], ['blockstun', 18, -2]], // 3+4+16 / -2+4+16
+  ['214HP', ['hitstun', 26, 5], ['blockstun', 24, 3]], // 5+4+17 / 3+4+17
+  ['236236K', ['down', 64, 10], null], // 10+16+38
+  ['214214P', ['down', 58, 12], null], // 12+9+37
+  ['236236P', ['down', 70, 17], null], // 17+15+38
+];
+
+const BRIDGET_REACTIONS: ReactionRow[] = [
+  ['5P', ['hitstun', 13, -3], ['blockstun', 10, -6]], // -3+2+14 / -6+2+14
+  ['5K', ['hitstun', 15, 1], ['blockstun', 12, -2]], // 1+5+9 / -2+5+9
+  ['5S', ['hitstun', 32, 13], ['blockstun', 20, 1]], // 13+6+13 / 1+6+13
+  ['5HS', ['hitstun', 20, -14], ['blockstun', 17, -17]], // -14+5+29 / -17+5+29
+  ['5D', ['hitstun', 29, 0], ['blockstun', 14, -15]], // 0+3+26 / -15+3+26
+  ['2P', ['hitstun', 13, 0], ['blockstun', 10, -3]], // 0+4+9 / -3+4+9
+  ['2K', ['hitstun', 15, 1], ['blockstun', 12, -2]], // 1+3+11 / -2+3+11
+  ['2S', ['hitstun', 20, -6], ['blockstun', 17, -9]], // -6+6+20 / -9+6+20
+  ['2HS', ['hitstun', 20, -15], ['blockstun', 17, -18]], // -15+11+24 / -18+11+24
+  ['2D', null, ['blockstun', 13, -6]], // ヒットは数字なし（HKD） / -6+4+15
+  ['236K', ['hitstun', 17, -17], ['blockstun', 14, -20]], // -17+25+9 / -20+25+9
+  ['236S', null, null],
+  ['236HS', null, null],
+  ['623P', null, ['blockstun', 23, -28]], // ヒットは数字なし（KD） / -28+12+39
+  ['63214P', null, null],
+  ['632146S', null, ['blockstun', 63, -29]], // ヒットは数字なし（HKD） / -29+45+47
+];
+
+describe('contactReaction (第13段階 受け入れ条件 1)', () => {
+  const check = (characterId: string, rows: ReactionRow[]) => {
+    for (const [input, hit, block] of rows) {
+      for (const [mode, exp] of [['hit', hit], ['block', block]] as [DummyMode, Expect][]) {
+        it(`${characterId} ${input} ${mode}: ${exp ? `${exp[0]} ${exp[1]}F / 有利 ${exp[2]}` : 'null'}`, () => {
+          const r = contactReaction(moveOf(characterId, input), mode);
+          if (exp === null) {
+            expect(r).toBeNull();
+          } else {
+            expect(r).toEqual({ kind: exp[0], frames: exp[1], advantage: exp[2] });
+          }
+        });
+      }
+    }
+  };
+
+  describe('キャミィ', () => check('cammy', CAMMY_REACTIONS));
+  describe('ブリジット', () => check('bridget', BRIDGET_REACTIONS));
+
+  it('表はそれぞれのキャラの全部の技を 1 回ずつ覆っている', () => {
+    expect(CAMMY_REACTIONS.map((r) => r[0]).sort()).toEqual(fighterDataFor('cammy')!.moves.map((m) => m.input).sort());
+    expect(BRIDGET_REACTIONS.map((r) => r[0]).sort()).toEqual(fighterDataFor('bridget')!.moves.map((m) => m.input).sort());
+  });
+
+  describe('キャミィの L は FAT の hitstun・blockstun と同じ（FAT の値をここに書く）', () => {
+    // [入力, FAT の hitstun, FAT の blockstun]
+    const FAT: [string, number | null, number | null][] = [
+      ['5LP', 15, 8],
+      ['5MP', 23, 16],
+      ['5HP', 25, 20],
+      ['5LK', 15, 10],
+      ['5MK', 24, 17],
+      ['5HK', 24, 19],
+      ['2LP', 15, 8],
+      ['2MP', 22, 15],
+      ['2HP', 26, 20],
+      ['2LK', 13, 8],
+      ['2MK', 22, 16],
+      ['214LP', 22, 17],
+      ['214MP', 23, 18],
+      ['214HP', 26, 24],
+      ['2HK', null, 17], // ヒットはダウン（hitstun なし）
+      ['623LK', null, 16], // 同上。623MK・623HK のガードは FAT と合わないので除く
+    ];
+    for (const [input, hitstun, blockstun] of FAT) {
+      it(`${input}`, () => {
+        const m = moveOf('cammy', input);
+        if (hitstun !== null) expect(contactReaction(m, 'hit')!.frames).toBe(hitstun);
+        expect(contactReaction(m, 'block')!.frames).toBe(blockstun);
+      });
+    }
+  });
+
+  it('反応があるとき、L（frames）はすべて 1 以上', () => {
+    for (const [cid, rows] of [['cammy', CAMMY_REACTIONS], ['bridget', BRIDGET_REACTIONS]] as const) {
+      for (const [input] of rows) {
+        for (const mode of ['hit', 'block'] as const) {
+          const r = contactReaction(moveOf(cid, input), mode);
+          if (r) expect(r.frames, `${cid} ${input} ${mode}`).toBeGreaterThanOrEqual(1);
+        }
+      }
+    }
+  });
+
+  it('5HK・2MP は当たったときの硬直（contactRecovery）が空振りと違い、データに書いてある', () => {
+    expect(moveOf('cammy', '5HK').recovery).toBe(21);
+    expect(moveOf('cammy', '5HK').contactRecovery).toBe(19);
+    expect(moveOf('cammy', '2MP').recovery).toBe(17);
+    expect(moveOf('cammy', '2MP').contactRecovery).toBe(14);
+  });
+
+  it('データを直接渡しても、式 L = 有利 + 持続 + 硬直 のとおり（contactRecovery があればそれを使う）', () => {
+    const base: MoveFrames = { input: 'x', startup: 5, active: 2, recovery: 10, onHit: 3, onBlock: -4 };
+    expect(contactReaction(base, 'hit')).toEqual({ kind: 'hitstun', frames: 15, advantage: 3 }); // 3+2+10
+    expect(contactReaction(base, 'block')).toEqual({ kind: 'blockstun', frames: 8, advantage: -4 }); // -4+2+10
+    const withContact: MoveFrames = { ...base, contactRecovery: 6 };
+    expect(contactReaction(withContact, 'hit')).toEqual({ kind: 'hitstun', frames: 11, advantage: 3 }); // 3+2+6
+    const kd: MoveFrames = { ...base, onHit: { knockdown: 20 } };
+    expect(contactReaction(kd, 'hit')).toEqual({ kind: 'down', frames: 32, advantage: 20 }); // 20+2+10
+    expect(contactReaction({ input: 'x', startup: 5, active: 2, recovery: 10 }, 'hit')).toBeNull();
+    expect(contactReaction({ input: 'x', startup: 5, active: 2, recovery: 10 }, 'block')).toBeNull();
   });
 });

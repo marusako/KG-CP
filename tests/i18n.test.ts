@@ -5,6 +5,7 @@ import { msg } from '../src/i18n/messages';
 import { pick } from '../src/i18n/localized';
 import { parseRecipe } from '../src/core/combo';
 import { PROFILES } from '../src/core/profiles';
+import type { Contact } from '../src/core/dummy';
 
 const JAPANESE = /[぀-ヿ一-鿿]/;
 
@@ -60,6 +61,8 @@ const SPECIAL_ARGS: Readonly<Record<string, readonly unknown[]>> = {
   normalMoveName: ['stand', 'LP'],
   // 第11段階: フレームメーターの技の並び（文の配列）
   frameMeterMoves: [['A', 'B']],
+  // 第13段階: 当たり方の文（Contact を受け取る）
+  contactText: [{ kind: 'hit', knockdown: false, combo: false, advantage: 5 }],
 };
 
 /** 関数は代表の引数（数）で呼んで文字列にする。入れ子のオブジェクトは辿る */
@@ -325,5 +328,52 @@ describe('GG のバーの注記 (第8段階 レビューの提案 3)', () => {
     expect(msg().barNoteGg).toBe('一部の猶予は有志の資料（Dustloop）の値です');
     setLang('en');
     expect(msg().barNoteGg).toBe('Some input windows are based on community data (Dustloop)');
+  });
+});
+
+describe('相手のダミーの文 (第13段階)', () => {
+  const c = (over: Partial<Contact>): Contact => ({ kind: 'hit', knockdown: false, combo: false, advantage: 5, ...over });
+
+  it('見出し・切り替え・データなしの文', () => {
+    expect(msg('ja').dummyLabel).toBe('相手');
+    expect(msg('ja').dummyHit).toBe('ヒット');
+    expect(msg('ja').dummyBlock).toBe('ガード');
+    expect(msg('ja').noReactionData).toBe('相手の反応のデータなし');
+    expect(msg('en').dummyLabel).toBe('Opponent');
+    expect(msg('en').dummyHit).toBe('Hit');
+    expect(msg('en').dummyBlock).toBe('Block');
+    expect(msg('en').noReactionData).toBe('No reaction data');
+  });
+
+  it('contactText 日本語', () => {
+    const t = msg('ja').contactText;
+    expect(t(c({}))).toBe('ヒット +5F');
+    expect(t(c({ combo: true }))).toBe('ヒット（つながった） +5F');
+    expect(t(c({ knockdown: true, advantage: 38 }))).toBe('ダウン +38F');
+    expect(t(c({ knockdown: true, advantage: 38, combo: true }))).toBe('ダウン（つながった） +38F');
+    expect(t(c({ kind: 'block', advantage: -2 }))).toBe('ガード -2F');
+    expect(t(c({ kind: 'block', advantage: -2, combo: true }))).toBe('ガード（連続ガード） -2F');
+  });
+
+  it('contactText 英語', () => {
+    const t = msg('en').contactText;
+    expect(t(c({}))).toBe('Hit +5F');
+    expect(t(c({ combo: true }))).toBe('Hit (combo) +5F');
+    expect(t(c({ knockdown: true, advantage: 38 }))).toBe('Knockdown +38F');
+    expect(t(c({ knockdown: true, advantage: 38, combo: true }))).toBe('Knockdown (combo) +38F');
+    expect(t(c({ kind: 'block', advantage: -2 }))).toBe('Block -2F');
+    expect(t(c({ kind: 'block', advantage: -2, combo: true }))).toBe('Block (blockstring) -2F');
+  });
+
+  it('有利 0 は ±0F', () => {
+    expect(msg('ja').contactText(c({ advantage: 0 }))).toBe('ヒット ±0F');
+    expect(msg('en').contactText(c({ kind: 'block', advantage: 0 }))).toBe('Block ±0F');
+  });
+
+  it('凡例に、相手の硬直（黄）とダウン（紫）が足される', () => {
+    expect(msg('ja').frameMeterLegend).toContain('黄: 相手の硬直　紫: 相手のダウン');
+    expect(msg('en').frameMeterLegend).toContain('Yellow: opponent stun  Purple: opponent knockdown');
+    // 今までの色の説明は残る
+    expect(msg('ja').frameMeterLegend).toContain('緑: 発生');
   });
 });

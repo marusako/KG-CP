@@ -1,5 +1,6 @@
 import { getLang, type Lang } from './lang';
 import type { MeterRun } from '../core/inputMeter';
+import { formatAdvantage, type Contact } from '../core/contact';
 import type { MoveFrames } from '../core/frameData';
 
 // 画面に出す文の表。ja と en のキーは、Messages の型で同じになるよう縛る。
@@ -138,7 +139,16 @@ const ja = {
   historyTitle: '入力履歴',
   frameMeterTitle: 'フレームメーター',
   frameMeterMoves: (texts: readonly string[]) => texts.join(' → '),
-  frameMeterLegend: '緑: 発生（数 + 1 が発生のフレーム）　赤: 持続　青: 硬直　灰: 動ける　水色: ジャンプ　橙の枠: 先行入力',
+  frameMeterLegend:
+    '緑: 発生（数 + 1 が発生のフレーム）　赤: 持続　青: 硬直　灰: 動ける　水色: ジャンプ　橙の枠: 先行入力　黄: 相手の硬直　紫: 相手のダウン',
+  dummyLabel: '相手',
+  dummyHit: 'ヒット',
+  dummyBlock: 'ガード',
+  noReactionData: '相手の反応のデータなし',
+  contactText: (c: Contact) =>
+    `${c.kind === 'block' ? 'ガード' : c.knockdown ? 'ダウン' : 'ヒット'}${
+      c.combo ? (c.kind === 'block' ? '（連続ガード）' : '（つながった）') : ''
+    } ${formatAdvantage(c.advantage)}F`,
   frameMeterEmpty: 'ボタンを押すと、ここに帯が出ます',
   meterRunsText: runsText,
   moveMeterNoCharacter: 'キャラを選ぶと技のフレームが出ます',
@@ -316,7 +326,15 @@ const en: Messages = {
   frameMeterTitle: 'Frame meter',
   frameMeterMoves: (texts) => texts.join(' → '),
   frameMeterLegend:
-    'Green: startup (number + 1 is the startup frame)  Red: active  Blue: recovery  Gray: free  Cyan: jump  Orange frame: buffered input',
+    'Green: startup (number + 1 is the startup frame)  Red: active  Blue: recovery  Gray: free  Cyan: jump  Orange frame: buffered input  Yellow: opponent stun  Purple: opponent knockdown',
+  dummyLabel: 'Opponent',
+  dummyHit: 'Hit',
+  dummyBlock: 'Block',
+  noReactionData: 'No reaction data',
+  contactText: (c) =>
+    `${c.kind === 'block' ? 'Block' : c.knockdown ? 'Knockdown' : 'Hit'}${
+      c.combo ? (c.kind === 'block' ? ' (blockstring)' : ' (combo)') : ''
+    } ${formatAdvantage(c.advantage)}F`,
   frameMeterEmpty: 'Press a button to start the meter',
   meterRunsText: runsText,
   moveMeterNoCharacter: 'Choose a character to see move frames',

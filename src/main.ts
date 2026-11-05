@@ -24,7 +24,8 @@ import { KeyboardReader } from './input/keyboard';
 import { detectPadFamily } from './input/padLayout';
 import { findCharacter, moveToCommand, type CharacterData } from './core/characters';
 import { INITIAL_FIGHTER, moveDisplayName, stepFighter, type FighterState } from './core/fighter';
-import { fighterDataFor, type FighterData } from './core/frameData';
+import { contactReaction, fighterDataFor, type FighterData } from './core/frameData';
+import { INITIAL_DUMMY, stepDummy, type DummyState } from './core/dummy';
 import { EMPTY_FRAME_METER, stepFrameMeter, stopFrameMeter, syncMoveTexts, type FrameMeterState } from './core/frameMeter';
 import { PROFILES, profileFor, type GameProfile, type PlayableGameId } from './core/profiles';
 import type { GameId } from './core/games';
@@ -109,17 +110,19 @@ function fighterOf(c: CharacterData | null): { data: FighterData; character: Cha
   return c !== null && data !== undefined ? { data, character: c } : null;
 }
 let fighter = fighterOf(character);
-/** キャラの状態と、フレームメーターの帯 */
+/** キャラの状態・相手の状態と、フレームメーターの帯 */
 let fighterState: FighterState = INITIAL_FIGHTER;
+let dummyState: DummyState = INITIAL_DUMMY;
 let frameMeter: FrameMeterState = EMPTY_FRAME_METER;
 /** 帯の starts と同じ順の、技の文（技が始まったときに作っておく。毎フレーム作らない） */
 let moveTexts: readonly string[] = [];
-/** moveTexts をつないだ、帯の下の 1 行目 */
+/** moveTexts に当たり方の結果を足して、つないだ、帯の下の 1 行目 */
 let movesLine = '';
 
-/** キャラの状態と帯を最初に戻す（キャラやゲームの切り替え・練習画面に入ったとき） */
+/** キャラ・相手の状態と帯を最初に戻す（キャラやゲーム・相手の切り替え、練習画面に入ったとき） */
 function resetFighter(): void {
   fighterState = INITIAL_FIGHTER;
+  dummyState = INITIAL_DUMMY;
   frameMeter = EMPTY_FRAME_METER;
   moveTexts = [];
   movesLine = '';
@@ -197,7 +200,11 @@ const comboRoots = { status: tabPane(statusColumn), select: tabPane(selectColumn
 const initialPractice = practiceOf(profile, character);
 const panel = createCommandPanel(practiceRoots, initialPractice.commands, initialPractice.notes);
 const comboPanel = createComboPanel(comboRoots, profile, character ?? undefined);
-const frameMeterView = createFrameMeterView(gameRoot);
+const frameMeterView = createFrameMeterView(gameRoot, settings.dummyMode, (dummyMode) => {
+  settings = { ...settings, dummyMode };
+  saveSettings(settings);
+  resetFighter();
+});
 
 const keyConfigLayer = document.createElement('div');
 keyConfigLayer.className = 'kc-layer';
@@ -414,15 +421,25 @@ function refreshPad(): void {
   }
 }
 
-/** 帯が変わったとき、技の文を帯の starts に合わせる（決まりは syncMoveTexts。文は技が始まったときに 1 回だけ作る） */
+/** 技の文の後ろにつける結果。当たったら当たり方、いまの切り替えで反応のデータがなければその知らせ、そうでなければ空 */
+function resultText(start: FrameMeterState['starts'][number]): string {
+  if (start.contact !== undefined) return ` / ${msg().contactText(start.contact)}`;
+  return contactReaction(start.move, settings.dummyMode) === null ? ` / ${msg().noReactionData}` : '';
+}
+
+/**
+ * 帯が変わったとき、技の文を帯の starts に合わせる（決まりは syncMoveTexts。文は技が始まったときに 1 回だけ作る）。
+ * 結果の文は、starts が変わったとき（技が始まった・当たった・古い技が外れた・新しい帯になった）に付け直す。
+ * 文の並びが同じでも starts が変わったら作り直す（新しい帯を前と同じ技で始めたとき、前の帯の結果を残さないため）
+ */
 function updateMoveTexts(before: FrameMeterState): void {
   const current = fighter;
   const texts = syncMoveTexts(moveTexts, before, frameMeter, (move) =>
     current === null ? move.input : msg().moveMeterText(moveDisplayName(move, current.character, profile, getLang()), move),
   );
-  if (texts === moveTexts) return;
+  if (texts === moveTexts && frameMeter.starts === before.starts) return;
   moveTexts = texts;
-  movesLine = msg().frameMeterMoves(texts);
+  movesLine = msg().frameMeterMoves(texts.map((t, i) => t + resultText(frameMeter.starts[i] as FrameMeterState['starts'][number])));
 }
 
 function stepFrame(end: number): void {
@@ -465,9 +482,12 @@ function stepFrame(end: number): void {
   // 練習画面の外では、キャラも帯も進めない（入ると最初に戻すので、外の入力は残らない）
   if (screens.current() === 'game') {
     const before = fighterState;
-    fighterState = stepFighter(before, history, fighter, profile, profile.inputBuffer);
+    const stepped = stepFighter(before, history, fighter, profile, profile.inputBuffer);
+    const hit = stepDummy(dummyState, stepped, settings.dummyMode);
+    fighterState = hit.fighter;
+    dummyState = hit.dummy;
     const prevMeter = frameMeter;
-    frameMeter = stepFrameMeter(prevMeter, before, fighterState, history);
+    frameMeter = stepFrameMeter(prevMeter, before, fighterState, history, { dummy: dummyState, contact: hit.contact });
     if (frameMeter !== prevMeter) updateMoveTexts(prevMeter);
   }
   renderHistory(compressHistory(history, HISTORY_ROWS));
@@ -492,6 +512,7 @@ function loop(): void {
     // 止まる前後の入力がつながらないよう、積んでいる途中なら帯を止めてキャラを最初に戻す
     frameMeter = stopFrameMeter(frameMeter);
     fighterState = INITIAL_FIGHTER;
+    dummyState = INITIAL_DUMMY;
     metrics.onStall();
   }
   // 描くのは練習画面にいるときだけ。前と同じ中身なら何もしない

@@ -65,7 +65,15 @@ textarea { display: block; box-sizing: border-box; width: 100%; margin: 8px 0; b
 .search-input { box-sizing: border-box; width: 100%; margin-bottom: 8px; padding: 6px 8px; background: #15171c; color: inherit; border: 1px solid #444; border-radius: 4px; }
 .search-input:focus { border-color: #ffd166; outline: none; }
 .fm-scroll { overflow-x: auto; padding-bottom: 4px; }
-.fm-strip { display: flex; width: max-content; min-height: 66px; }
+.fm-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.fm-dummy { display: flex; gap: 6px; align-items: center; font-size: 13px; color: #9aa; }
+.fm-dummy button.active { background: #3a5a9a; }
+.fm-band { display: flex; align-items: flex-start; }
+.fm-band .fm-scroll { flex: 1 1 auto; min-width: 0; }
+.fm-advantage { flex: 0 0 auto; min-width: 4ch; padding: 20px 0 0 8px; font-size: 18px; font-weight: bold; text-align: right; font-variant-numeric: tabular-nums; }
+.fm-advantage.plus { color: #4caf50; }
+.fm-advantage.minus { color: #e04b4b; }
+.fm-strip { display: flex; width: max-content; min-height: 80px; }
 .fm-col { flex: 0 0 22px; box-sizing: border-box; position: relative; }
 /* 目盛りは、色のマスの上に重ねて描く（親の影だと子の背景に隠れるため） */
 .fm-col.tick5::after,
@@ -88,6 +96,11 @@ textarea { display: block; box-sizing: border-box; width: 100%; margin: 8px 0; b
 .fm-top.active { background: #e04b4b; }
 .fm-top.recovery { background: #3a6fd8; }
 .fm-top.jump { background: #4fc3d8; }
+/* 相手の段。free は暗い灰、硬直（ヒット・ガード）は黄、ダウンは紫 */
+.fm-opp { height: 14px; border-bottom: 1px solid #15171c; box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.35); }
+.fm-opp.free { background: #33363e; }
+.fm-opp.hitstun, .fm-opp.blockstun { background: #e0c84b; }
+.fm-opp.down { background: #9b59d0; }
 .fm-bottom { height: 38px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; }
 .fm-bottom.held { background: #3a3520; }
 .fm-bottom.pressed { background: #ffd166; color: #15171c; }

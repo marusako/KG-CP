@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS, parseSettings, serializeSettings } from '../src/core/
 
 describe('DEFAULT_SETTINGS (受け入れ条件 4)', () => {
   it('volume 80・lastGame null・lang ja', () => {
-    expect(DEFAULT_SETTINGS).toEqual({ volume: 80, lastGame: null, lastCharacter: {}, lang: 'ja' });
+    expect(DEFAULT_SETTINGS).toEqual({ volume: 80, lastGame: null, lastCharacter: {}, lang: 'ja', dummyMode: 'hit' });
   });
 });
 
@@ -107,7 +107,7 @@ describe('parseSettings: 項目ごとに見る (受け入れ条件 4)', () => {
     expect(parseSettings('{"volume":25,"lastGame":"mbtl"}')).toEqual({
       volume: 25,
       lastGame: null,
-      lastCharacter: {}, lang: 'ja',
+      lastCharacter: {}, lang: 'ja', dummyMode: 'hit',
     });
   });
 
@@ -115,7 +115,7 @@ describe('parseSettings: 項目ごとに見る (受け入れ条件 4)', () => {
     expect(parseSettings('{"volume":"abc","lastGame":"ggst"}')).toEqual({
       volume: 80,
       lastGame: 'ggst',
-      lastCharacter: {}, lang: 'ja',
+      lastCharacter: {}, lang: 'ja', dummyMode: 'hit',
     });
   });
 
@@ -123,25 +123,25 @@ describe('parseSettings: 項目ごとに見る (受け入れ条件 4)', () => {
     expect(parseSettings('{"volume":10,"lastGame":"sf6","extra":1}')).toEqual({
       volume: 10,
       lastGame: 'sf6',
-      lastCharacter: {}, lang: 'ja',
+      lastCharacter: {}, lang: 'ja', dummyMode: 'hit',
     });
   });
 });
 
 describe('serializeSettings (受け入れ条件 4)', () => {
   it('文字列を返し、JSON として読める', () => {
-    const text = serializeSettings({ volume: 60, lastGame: 'sf6', lastCharacter: {}, lang: 'ja' });
+    const text = serializeSettings({ volume: 60, lastGame: 'sf6', lastCharacter: {}, lang: 'ja', dummyMode: 'hit' });
     expect(typeof text).toBe('string');
     expect(() => JSON.parse(text)).not.toThrow();
   });
 
   it('parse して戻すと同じ (往復)', () => {
     const cases = [
-      { volume: 0, lastGame: null, lastCharacter: {}, lang: 'ja' },
-      { volume: 100, lastGame: 'sf6', lastCharacter: {}, lang: 'ja' },
-      { volume: 37, lastGame: 'ggst', lastCharacter: {}, lang: 'ja' },
-      { volume: 50, lastGame: 'sf6', lastCharacter: { sf6: 'cammy' }, lang: 'ja' },
-      { volume: 50, lastGame: 'ggst', lastCharacter: { sf6: 'cammy', ggst: 'bridget' }, lang: 'ja' },
+      { volume: 0, lastGame: null, lastCharacter: {}, lang: 'ja', dummyMode: 'hit' },
+      { volume: 100, lastGame: 'sf6', lastCharacter: {}, lang: 'ja', dummyMode: 'hit' },
+      { volume: 37, lastGame: 'ggst', lastCharacter: {}, lang: 'ja', dummyMode: 'hit' },
+      { volume: 50, lastGame: 'sf6', lastCharacter: { sf6: 'cammy' }, lang: 'ja', dummyMode: 'hit' },
+      { volume: 50, lastGame: 'ggst', lastCharacter: { sf6: 'cammy', ggst: 'bridget' }, lang: 'ja', dummyMode: 'hit' },
       DEFAULT_SETTINGS,
     ] as const;
     for (const s of cases) {
@@ -157,7 +157,7 @@ describe('parseSettings: lastCharacter (第6段階 受け入れ条件 6)', () =>
     expect(parseSettings('{"volume":50,"lastGame":"sf6"}')).toEqual({
       volume: 50,
       lastGame: 'sf6',
-      lastCharacter: {}, lang: 'ja',
+      lastCharacter: {}, lang: 'ja', dummyMode: 'hit',
     });
   });
 
@@ -197,12 +197,12 @@ describe('parseSettings: lastCharacter (第6段階 受け入れ条件 6)', () =>
     expect(parseSettings('{"volume":25,"lastGame":"ggst","lastCharacter":"x"}')).toEqual({
       volume: 25,
       lastGame: 'ggst',
-      lastCharacter: {}, lang: 'ja',
+      lastCharacter: {}, lang: 'ja', dummyMode: 'hit',
     });
   });
 
   it('serializeSettings は lastCharacter も書く', () => {
-    const text = serializeSettings({ volume: 60, lastGame: 'sf6', lastCharacter: { sf6: 'cammy' }, lang: 'ja' });
+    const text = serializeSettings({ volume: 60, lastGame: 'sf6', lastCharacter: { sf6: 'cammy' }, lang: 'ja', dummyMode: 'hit' });
     expect(JSON.parse(text).lastCharacter).toEqual({ sf6: 'cammy' });
   });
 });
@@ -239,15 +239,75 @@ describe('parseSettings: lang (第7段階 受け入れ条件 8)', () => {
       volume: 25,
       lastGame: 'ggst',
       lastCharacter: {},
-      lang: 'en',
+      lang: 'en', dummyMode: 'hit',
     });
   });
 
   it('serializeSettings は lang も書き、往復で元に戻る（fallback と違う言語でも）', () => {
-    const s = { volume: 60, lastGame: 'sf6', lastCharacter: {}, lang: 'en' } as const;
+    const s = { volume: 60, lastGame: 'sf6', lastCharacter: {}, lang: 'en', dummyMode: 'hit' } as const;
     expect(JSON.parse(serializeSettings(s)).lang).toBe('en');
     expect(parseSettings(serializeSettings(s), 'ja')).toEqual(s);
-    const j = { ...s, lang: 'ja' } as const;
+    const j = { ...s, lang: 'ja', dummyMode: 'hit' } as const;
     expect(parseSettings(serializeSettings(j), 'en')).toEqual(j);
+  });
+});
+
+describe('parseSettings: dummyMode (第13段階 受け入れ条件 7)', () => {
+  const mode = (v: string) => parseSettings(`{"dummyMode":${v}}`).dummyMode;
+
+  it("既定は 'hit'", () => {
+    expect(DEFAULT_SETTINGS.dummyMode).toBe('hit');
+    expect(parseSettings(null).dummyMode).toBe('hit');
+    expect(parseSettings('{}').dummyMode).toBe('hit');
+  });
+
+  it("'hit'・'block' は、そのまま読める", () => {
+    expect(mode('"hit"')).toBe('hit');
+    expect(mode('"block"')).toBe('block');
+  });
+
+  it("読めない値（知らない文字列・数値・真偽値・null・配列・大文字）は 'hit'", () => {
+    for (const v of ['"down"', '"Block"', '"BLOCK"', '""', '1', 'true', 'null', '[]', '{}', '["block"]']) {
+      expect(mode(v), v).toBe('hit');
+    }
+  });
+
+  it('前の版の保存（dummyMode なし）を読むと、ほかの項目はそのまま、dummyMode は hit', () => {
+    expect(parseSettings('{"volume":25,"lastGame":"ggst","lang":"en"}')).toEqual({
+      volume: 25,
+      lastGame: 'ggst',
+      lastCharacter: {},
+      lang: 'en',
+      dummyMode: 'hit',
+    });
+  });
+
+  it('dummyMode だけおかしくても、ほかの項目は保存した値のまま', () => {
+    expect(parseSettings('{"volume":25,"lastGame":"ggst","dummyMode":"x"}')).toEqual({
+      volume: 25,
+      lastGame: 'ggst',
+      lastCharacter: {},
+      lang: 'ja',
+      dummyMode: 'hit',
+    });
+  });
+
+  it('壊れた保存でも dummyMode は hit', () => {
+    expect(parseSettings('{dummyMode:').dummyMode).toBe('hit');
+    expect(parseSettings('[1]').dummyMode).toBe('hit');
+  });
+
+  it('serializeSettings は dummyMode も書き、往復で元に戻る', () => {
+    const s = { volume: 60, lastGame: 'sf6', lastCharacter: {}, lang: 'ja', dummyMode: 'block' } as const;
+    expect(JSON.parse(serializeSettings(s)).dummyMode).toBe('block');
+    expect(parseSettings(serializeSettings(s))).toEqual(s);
+    const h = { ...s, dummyMode: 'hit' } as const;
+    expect(parseSettings(serializeSettings(h))).toEqual(h);
+  });
+
+  it('dummyMode だけ違う設定は、往復しても混ざらない', () => {
+    const b = { ...DEFAULT_SETTINGS, dummyMode: 'block' } as const;
+    expect(parseSettings(serializeSettings(b)).dummyMode).toBe('block');
+    expect(parseSettings(serializeSettings(DEFAULT_SETTINGS)).dummyMode).toBe('hit');
   });
 });
