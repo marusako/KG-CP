@@ -12,6 +12,8 @@ import {
   EMPTY_FRAME_METER,
   FRAME_METER_LEAD,
   FRAME_METER_MAX,
+  isEarlyPress,
+  labeledSegments,
   stepFrameMeter,
 } from '../src/core/frameMeter';
 import type { FrameMeterState, StateKind } from '../src/core/frameMeter';
@@ -395,5 +397,39 @@ describe('メーターの印 (第14段階 受け入れ条件 10)', () => {
 
   it('FRAME_METER_MAX は 240', () => {
     expect(FRAME_METER_MAX).toBe(240);
+  });
+});
+
+describe('連打でキャンセルが消えない (第18段階 受け入れ条件 1・2)', () => {
+  const MP = b(5, 'MP');
+
+  it('5LP（3 で当たり、4〜12 が止まる）の 3 で 2LP、4 で 5MP → 4 で 2LP が予約（cancelTo）になり、13 から 2LP（canceled: true）', () => {
+    const run = play([[0, LP], [3, LP2], [4, MP]], 40, 'hit');
+    expect(run.at(3).contact).not.toBeNull();
+    expect(run.at(4).fighter.cancelTo?.input).toBe('2LP');
+    for (let n = 5; n <= 12; n++) expect(run.at(n).fighter.cancelTo?.input, `n=${n}`).toBe('2LP');
+    const f = run.at(13).fighter;
+    expect([f.move?.input, f.phase, f.frame, f.canceled]).toEqual(['2LP', 'startup', 0, true]);
+  });
+
+  it('予約のあとにキャンセル先でない技を押しても、予約が残る（8 で 2LP、10 で 5MP → 13 から 2LP）', () => {
+    const run = play([[0, LP], [8, LP2], [10, MP]], 40, 'hit');
+    expect(run.at(10).fighter.cancelTo?.input).toBe('2LP');
+    const f = run.at(13).fighter;
+    expect([f.move?.input, f.phase, f.frame, f.canceled]).toEqual(['2LP', 'startup', 0, true]);
+  });
+
+  it('labeledSegments は、ヒットストップの区間（5LP のヒットなら 9）に長さの数字を付ける', () => {
+    const run = play([[0, LP]], 40, 'hit');
+    const labeled = labeledSegments(run.meter());
+    const hitstop = labeled.find((s) => s.state === 'hitstop');
+    expect(hitstop?.length).toBe(9);
+  });
+
+  it('ヒットストップ中に押したマスは isEarlyPress が true（止まっていない時間の押しは false）', () => {
+    const run = play([[0, LP], [8, LP2]], 40, 'hit');
+    const cells = run.cells();
+    expect(isEarlyPress(cells[8]!)).toBe(true);
+    expect(isEarlyPress(cells[0]!)).toBe(false);
   });
 });

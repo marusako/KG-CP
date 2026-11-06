@@ -257,7 +257,8 @@ function freeStep(state: FighterState, dir: number): FighterState {
  * - 技の途中: startup → active → recovery と進み、終わったら動ける状態へ
  * - 技の途中や着地中に選ばれた技は buffered に入れる。動けるようになるまでに age が inputBuffer を超えたら捨てる
  * - ヒットストップ（state.hitstop が 1 以上）: 段階・フレーム・技は変えず、frozen を付けて hitstop を 1 減らす。
- *   先行入力は同じように進め、残っているものがキャンセル先（move.cancels）なら cancelTo に予約する。
+ *   先行入力は同じように進める。キャンセル先（move.cancels）は、このフレームで新しく選ばれた技 → すでにある予約 →
+ *   上書きされる前の先行入力（古くなりすぎていないもの）の順に探し、最初に見つかったものを cancelTo に予約する（連打で消えない）。
  *   止まり終わった最初のフレームで、予約があればその技を出す（canceled）
  * - 当たったあと（contact）、持続か硬直の 0 フレーム目になるフレームで、選ばれた技か先行入力がキャンセル先ならそのフレームから出す
  * - 派生: 技を出している間に、その技の派生の入力が新しく押され、受付（FollowUp.window）の中なら、そのフレームから派生の技を出す
@@ -304,13 +305,14 @@ export function stepFighter(
   // 先行入力は 1 フレームごとに古くなる。新しく選ばれたものは古いものに替える
   let buffered = state.buffered === null ? null : { move: state.buffered.move, age: state.buffered.age + 1 };
   if (buffered !== null && buffered.age > inputBuffer) buffered = null;
+  // 上書きされる前の先行入力（ヒットストップ中の予約を決めるときにも見る）
+  const overwritten = buffered?.move;
   if (selected !== null) buffered = { move: selected, age: 0 };
 
   // ヒットストップ中: 止まる。キャンセル先は、新しく押したものを優先して予約にする
   if (state.hitstop !== undefined && state.hitstop >= 1) {
     const { hitstop: _hitstop, followFromPrev: _followFromPrev, ...rest } = state;
     const left = state.hitstop - 1;
-    const queued = buffered?.move;
     // 止まっている間は親の技のフレームが進まないので、いまの番号（位置 + 1）で受付を見る。派生の予約は、キャンセル先より優先する
     const followNow = follow !== undefined && followWindowOpen(state, follow, movePosition(state) + 1) ? follow.move : undefined;
     const reserve =
@@ -319,7 +321,7 @@ export function stepFighter(
         ? state.cancelTo
         : cancelsTo(state, fresh)
           ? fresh
-          : state.cancelTo ?? (cancelsTo(state, queued) ? queued : undefined));
+          : state.cancelTo ?? (cancelsTo(state, overwritten) ? overwritten : undefined));
     return {
       ...rest,
       frozen: true,
