@@ -113,6 +113,7 @@ const ja = {
   outcomePending: '出た技: 待っています（技の途中に押したので、動けるようになったら出ます）',
   outcomeNoData: 'この技はフレームデータがないので、出る技は分かりません',
   // 派生の項目（コマンド練習）
+  meterNoData: (name: string) => `${name} はフレームデータがないので、メーターに出ません`,
   followUpOk: '成立！ 派生が出ました',
   followUpNoParent: '親の技が出ていません',
   followUpEarly: (n: number) => `早い（あと ${n}F 遅く）`,
@@ -324,6 +325,7 @@ const en: Messages = {
     `No move came out${reason === 'air' ? ' (cannot be used in the air)' : reason === 'bufferLost' ? ' (the input buffer expired)' : ''}`,
   outcomePending: 'Came out: waiting (pressed during a move; it comes out when you can act)',
   outcomeNoData: 'This move has no frame data, so the move that comes out is unknown',
+  meterNoData: (name) => `${name} has no frame data, so it does not appear on the meter`,
   followUpOk: 'Success! The follow-up came out',
   followUpNoParent: 'The base move is not out',
   followUpEarly: (n) => `Too early (${n}F later)`,

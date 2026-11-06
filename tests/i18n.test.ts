@@ -507,3 +507,13 @@ describe('第17段階の文（コマンド練習の派生の失敗）', () => {
     }
   });
 });
+
+describe('第19段階の文（meterNoData）', () => {
+  it('日本語・英語。英語は日本語を含まない', () => {
+    setLang('ja');
+    expect(msg().meterNoData('X (5LP)')).toBe('X (5LP) はフレームデータがないので、メーターに出ません');
+    setLang('en');
+    expect(msg().meterNoData('X (5LP)')).toBe('X (5LP) has no frame data, so it does not appear on the meter');
+    expect(msg().meterNoData('X (5LP)')).not.toMatch(JAPANESE);
+  });
+});

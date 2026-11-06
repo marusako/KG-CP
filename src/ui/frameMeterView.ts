@@ -8,9 +8,10 @@ import { ARROWS } from './arrows';
 export interface FrameMeterView {
   /**
    * 帯と帯の下の文を描く。前と同じ中身なら何も書かない。
-   * 右端に帯の advantage（有利フレーム）を出す。movesText は技の並びの文（技がなければ空）、noCharacter はキャラなしのとき true（案内を足す）
+   * 右端に帯の advantage（有利フレーム）を出す。movesText は技の並びの文（技がなければ空）、
+   * noteText は注記の行の文（キャラなしの案内・フレームデータのない技の知らせ。なければ空）
    */
-  render(state: FrameMeterState, movesText: string, noCharacter: boolean): void;
+  render(state: FrameMeterState, movesText: string, noteText: string): void;
   /**
    * true の間は、相手の切り替えを押せなくし（disabled）、「ヒット」を選んだ見た目にして、横に固定の理由の文を出す。
    * false に戻すと、設定の切り替えの見た目に戻る（コンボトライアルのタブの間だけ固定するために使う）
@@ -104,7 +105,7 @@ export function createFrameMeterView(
   let shown: readonly FrameMeterCell[] | null = null;
   let movesShown = '';
   let runsShown = '';
-  let noteShown: boolean | null = null;
+  let noteShown = '';
   let advantageShown: number | null = null;
   /** マスの要素と、いま書いてある値（同じ値なら書き直さないため） */
   interface CellEl {
@@ -180,7 +181,7 @@ export function createFrameMeterView(
       locked = next;
       paintModes();
     },
-    render(state, movesText, noCharacter) {
+    render(state, movesText, noteText) {
       const cells = state.cells;
       const empty = cells.length === 0;
       const moves = empty ? msg().frameMeterEmpty : movesText;
@@ -188,9 +189,9 @@ export function createFrameMeterView(
         movesShown = moves;
         movesLine.textContent = moves;
       }
-      if (noCharacter !== noteShown) {
-        noteShown = noCharacter;
-        note.textContent = noCharacter ? msg().moveMeterNoCharacter : '';
+      if (noteText !== noteShown) {
+        noteShown = noteText;
+        note.textContent = noteText;
       }
       if (state.advantage !== advantageShown) {
         advantageShown = state.advantage;

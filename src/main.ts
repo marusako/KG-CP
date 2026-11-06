@@ -23,7 +23,7 @@ import { readGamepads, type PadInfo, type PadState } from './input/gamepad';
 import { KeyboardReader } from './input/keyboard';
 import { detectPadFamily } from './input/padLayout';
 import { findCharacter, moveToPractice, type CharacterData } from './core/characters';
-import { INITIAL_FIGHTER, moveDisplayName, stepFighter, type FighterState } from './core/fighter';
+import { INITIAL_FIGHTER, moveDisplayName, noDataMove, stepFighter, type FighterState } from './core/fighter';
 import { contactReaction, fighterDataFor, type DummyMode, type FighterData } from './core/frameData';
 import { IDLE_OUTCOME, moveMatchesCommand, stepMoveOutcome, type OutcomeState } from './core/moveOutcome';
 import { INITIAL_DUMMY, stepDummy, type DummyState } from './core/dummy';
@@ -121,6 +121,8 @@ let frameMeter: FrameMeterState = EMPTY_FRAME_METER;
 let moveTexts: readonly string[] = [];
 /** moveTexts に当たり方の結果を足して、つないだ、帯の下の 1 行目 */
 let movesLine = '';
+/** フレームデータのない技を入れたときの注記（名前つきの文）と、そのとき帯にあった技の数。次に技が始まる・新しい帯になると消す */
+let noDataNote: { text: string; starts: number } | null = null;
 
 /** コマンド練習の出た技の追いかけ。command は、待っている試しで選んでいた技 */
 let outcome: { state: OutcomeState; command: PracticeDef | null } = { state: IDLE_OUTCOME, command: null };
@@ -163,6 +165,7 @@ function resetFighter(): void {
   frameMeter = EMPTY_FRAME_METER;
   moveTexts = [];
   movesLine = '';
+  noDataNote = null;
   outcome = { state: IDLE_OUTCOME, command: null };
 }
 
@@ -540,6 +543,15 @@ function stepFrame(end: number): void {
     const prevMeter = frameMeter;
     frameMeter = stepFrameMeter(prevMeter, before, fighterState, history, { dummy: dummyState, contact: hit.contact });
     if (frameMeter !== prevMeter) updateMoveTexts(prevMeter);
+    // フレームデータのない技の注記: 次に帯に技が始まる・新しい帯になったら消す。キャラなしでは調べない
+    if (noDataNote !== null && (frameMeter.starts.length !== noDataNote.starts || (!prevMeter.recording && frameMeter.recording))) {
+      noDataNote = null;
+    }
+    if (fighter !== null) {
+      const missing = noDataMove(history, fighter.data, fighter.character, profile);
+      const def = missing === null ? null : moveToPractice(missing, profile);
+      if (def !== null) noDataNote = { text: msg().meterNoData(def.name), starts: frameMeter.starts.length };
+    }
     if (activeTab !== 'combo' && fighter !== null && practiceSelected.kind === 'followUp') {
       followUpJudge = judgePracticeFollowUp(practiceSelected, fighter.data, profile, history, before, hit.fighter);
     }
@@ -588,7 +600,7 @@ function loop(): void {
     metrics.onStall();
   }
   // 描くのは練習画面にいるときだけ。前と同じ中身なら何もしない
-  if (screens.current() === 'game') frameMeterView.render(frameMeter, movesLine, fighter === null);
+  if (screens.current() === 'game') frameMeterView.render(frameMeter, movesLine, fighter === null ? msg().moveMeterNoCharacter : (noDataNote?.text ?? ''));
   metrics.onRaf(now, due.frameEnds.length, due.stalled);
   requestAnimationFrame(loop);
 }

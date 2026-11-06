@@ -1,7 +1,7 @@
 import type { Lang } from '../i18n/lang';
 import { pick } from '../i18n/localized';
 import { msg } from '../i18n/messages';
-import type { CharacterData } from './characters';
+import type { CharacterData, MoveData } from './characters';
 import { analyzeAttempt } from './detect';
 import type { FighterData, FollowUp, MoveFrames } from './frameData';
 import type { NotationRules } from './notation';
@@ -91,6 +91,48 @@ export function selectMove(
   for (const button of fresh) {
     const hit = data.moves.find((mv) => mv.input === `${stance}${button}`);
     if (hit !== undefined) return hit;
+  }
+  return null;
+}
+
+/**
+ * いまのフレーム（history の最後）でボタンが新しく押され、キャラの技のコマンドが成立したのに、
+ * フレームデータに当たる技がないとき、その技（MoveData）。そうでなければ null。派生の技は見ない。
+ * 成立の見方と先に調べる順は selectMove と同じ（方向の手が多いもの → 少ないもの）。先に成立したコマンドにデータがあれば null
+ */
+export function noDataMove(
+  history: readonly FrameInput[],
+  data: FighterData,
+  character: CharacterData,
+  rules: NotationRules,
+): MoveData | null {
+  const cur = history[history.length - 1];
+  if (cur === undefined || cur.buttons.length === 0) return null;
+  const prev = history[history.length - 2];
+  const fresh = cur.buttons.filter((b) => !(prev?.buttons.includes(b) ?? false));
+  if (fresh.length === 0) return null;
+
+  const candidates: { move: MoveData; command: CommandDef; buttons: readonly string[]; steps: number }[] = [];
+  for (const move of character.moves) {
+    if (move.kind === 'followUp') continue;
+    for (const text of move.inputs) {
+      const r = parseStep(text, rules);
+      if (!r.ok || r.input.kind !== 'command') continue;
+      const { command, buttons } = r.input;
+      candidates.push({ move, command, buttons, steps: command.kind === 'motion' ? command.steps.length : 0 });
+    }
+  }
+  candidates.sort((a, b) => b.steps - a.steps);
+  for (const c of candidates) {
+    for (const button of fresh) {
+      if (!c.buttons.includes(button)) continue;
+      if (analyzeAttempt(history, { ...c.command, buttons: [button] })?.ok !== true) continue;
+      const hasData = data.moves.some((m) => {
+        const r = parseStep(m.input, rules);
+        return r.ok && r.input.kind === 'command' && r.input.command.notation === c.command.notation && r.input.buttons.includes(button);
+      });
+      return hasData ? null : c.move;
+    }
   }
   return null;
 }
