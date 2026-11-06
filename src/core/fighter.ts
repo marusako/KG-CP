@@ -4,6 +4,7 @@ import { msg } from '../i18n/messages';
 import type { CharacterData, MoveData } from './characters';
 import { analyzeAttempt } from './detect';
 import type { FighterData, FollowUp, MoveFrames } from './frameData';
+import type { Distance } from './settings';
 import type { NotationRules } from './notation';
 import { followInputMatches, parseFollowInput, parseStep, stepInputMatches } from './notation';
 import type { CommandDef, FrameInput } from './types';
@@ -61,13 +62,14 @@ function parsedFor(data: FighterData, character: CharacterData, rules: NotationR
  * 必殺技・超必殺技は、表記のルール（rules）で入力を読み、analyzeAttempt が成功したものを選ぶ。
  * 並べる順（先に当たったものを選ぶ）: 方向の手が多いもの（236236 など）→ 少ないもの → 通常技。
  * コマンドが成立したのに技のデータがないとき（例: ブリジットの 214S）は、通常技に落とさず null。
- * 通常技は、いまの方向が 1・2・3 なら 2X、それ以外（4・5・6）なら 5X。7・8・9（ジャンプ）は null
+ * 通常技は、いまの方向が 1・2・3 なら 2X、それ以外（4・5・6）なら 5X。ただし立ちの S は、データに c.S・f.S があれば、distance が近いなら c.S、遠いなら f.S。7・8・9（ジャンプ）は null
  */
 export function selectMove(
   history: readonly FrameInput[],
   data: FighterData,
   character: CharacterData,
   rules: NotationRules,
+  distance: Distance = 'close',
 ): MoveFrames | null {
   const cur = history[history.length - 1];
   if (cur === undefined || cur.buttons.length === 0) return null;
@@ -89,7 +91,9 @@ export function selectMove(
   const stance = cur.dir <= 3 ? '2' : cur.dir <= 6 ? '5' : null;
   if (stance === null) return null;
   for (const button of fresh) {
-    const hit = data.moves.find((mv) => mv.input === `${stance}${button}`);
+    // 立ちは、近S・遠S（c.S・f.S）がデータにあれば距離で選ぶ。なければ 5X
+    const ranged = stance === '5' ? data.moves.find((mv) => mv.input === `${distance === 'far' ? 'f' : 'c'}.${button}`) : undefined;
+    const hit = ranged ?? data.moves.find((mv) => mv.input === `${stance}${button}`);
     if (hit !== undefined) return hit;
   }
   return null;
@@ -315,13 +319,14 @@ export function stepFighter(
   fighter: { data: FighterData; character: CharacterData } | null,
   rules: NotationRules,
   inputBuffer: number,
+  distance: Distance = 'close',
 ): FighterState {
   const dir = history[history.length - 1]?.dir ?? 5;
   const jump = fighter?.data.jump ?? DEFAULT_JUMP;
 
   // 空中・跳ぶ前はボタンを無視する
   const canAct = state.phase !== 'prejump' && state.phase !== 'air';
-  const selected = fighter !== null && canAct ? selectMove(history, fighter.data, fighter.character, rules) : null;
+  const selected = fighter !== null && canAct ? selectMove(history, fighter.data, fighter.character, rules, distance) : null;
   // キャンセル先かを調べる（cancelsTo は型ガードなので、null を undefined にそろえた変数で渡す）
   const fresh = selected ?? undefined;
 
@@ -430,6 +435,9 @@ export function moveDisplayName(move: MoveFrames, character: CharacterData, rule
   const r = parseStep(move.input, rules);
   if (!r.ok) return move.input;
   if (r.input.kind === 'normal') {
+    if (r.input.range !== undefined) {
+      return `${msg(lang).rangedMoveName(r.input.range, move.input.slice(2))} (${move.input})`;
+    }
     const posture = move.input.startsWith('2') ? 'crouch' : 'stand';
     return `${msg(lang).normalMoveName(posture, move.input.slice(1))} (${move.input})`;
   }

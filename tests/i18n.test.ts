@@ -517,3 +517,17 @@ describe('第19段階の文（meterNoData）', () => {
     expect(msg().meterNoData('X (5LP)')).not.toMatch(JAPANESE);
   });
 });
+
+describe('第20段階の文（距離）', () => {
+  it('日本語・英語。英語は日本語を含まない', () => {
+    setLang('ja');
+    expect([msg().distanceLabel, msg().distanceClose, msg().distanceFar]).toEqual(['距離', '近い', '遠い']);
+    expect(msg().distanceLockedCombo).toBe('コンボトライアル中はレシピに合わせる');
+    setLang('en');
+    expect([msg().distanceLabel, msg().distanceClose, msg().distanceFar]).toEqual(['Distance', 'Close', 'Far']);
+    expect(msg().distanceLockedCombo).toBe('Follows the recipe during combo trials');
+    for (const t of [msg().distanceLabel, msg().distanceClose, msg().distanceFar, msg().distanceLockedCombo]) {
+      expect(t).not.toMatch(JAPANESE);
+    }
+  });
+});

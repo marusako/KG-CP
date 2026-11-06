@@ -178,17 +178,36 @@ const BRIDGET: CharacterData = {
     { id: 'bridget-ksmh-shoot', name: { en: 'Shoot' }, inputs: ['236K~K'], kind: 'followUp' },
   ],
   combos: [
+    // 出典: Dustloop の基本ルート（c.S > f.S//2S > 5H/2H > 236K(~K)。検索結果の抜粋で確認、確認日 2026-11-06）
     {
       id: 'bridget-combo-1',
-      name: { en: '5S > 2S > 2HS > 236K' },
-      steps: [
-        { input: '5S' },
-        { input: '2S', join: 'cancel' },
-        { input: '2HS', join: 'cancel' },
-        { input: '236K', join: 'cancel' },
-      ],
-      // アプリは近S と遠S を分けないので 5S と書く
-      source: 'Dustloop の基本ルート（c.S > 2S > 2H > 236K）',
+      name: { en: 'c.S > 2S > 2HS > 236K' },
+      steps: [{ input: 'c.S' }, { input: '2S', join: 'cancel' }, { input: '2HS', join: 'cancel' }, { input: '236K', join: 'cancel' }],
+      source: 'Dustloop の基本ルート（c.S > f.S//2S > 5H/2H > 236K(~K)。検索結果の抜粋で確認）',
+    },
+    {
+      id: 'bridget-combo-2',
+      name: { en: 'c.S > 2S > 5HS > 236K' },
+      steps: [{ input: 'c.S' }, { input: '2S', join: 'cancel' }, { input: '5HS', join: 'cancel' }, { input: '236K', join: 'cancel' }],
+      source: 'Dustloop の基本ルート（c.S > f.S//2S > 5H/2H > 236K(~K)。検索結果の抜粋で確認）',
+    },
+    {
+      id: 'bridget-combo-3',
+      name: { en: 'c.S > f.S > 5HS > 236K' },
+      steps: [{ input: 'c.S' }, { input: 'f.S', join: 'cancel' }, { input: '5HS', join: 'cancel' }, { input: '236K', join: 'cancel' }],
+      source: 'Dustloop の基本ルート（c.S > f.S//2S > 5H/2H > 236K(~K)。検索結果の抜粋で確認）',
+    },
+    {
+      id: 'bridget-combo-4',
+      name: { en: 'c.S > f.S > 2HS > 236K' },
+      steps: [{ input: 'c.S' }, { input: 'f.S', join: 'cancel' }, { input: '2HS', join: 'cancel' }, { input: '236K', join: 'cancel' }],
+      source: 'Dustloop の基本ルート（c.S > f.S//2S > 5H/2H > 236K(~K)。検索結果の抜粋で確認）',
+    },
+    {
+      id: 'bridget-combo-5',
+      name: { en: 'c.S > 2S > 2HS > 236K~K' },
+      steps: [{ input: 'c.S' }, { input: '2S', join: 'cancel' }, { input: '2HS', join: 'cancel' }, { input: '236K~K', join: 'cancel' }],
+      source: 'Dustloop の基本ルート（c.S > f.S//2S > 5H/2H > 236K(~K)。検索結果の抜粋で確認）',
     },
   ],
 };

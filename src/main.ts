@@ -22,6 +22,7 @@ import { resolveDirection } from './input/direction';
 import { readGamepads, type PadInfo, type PadState } from './input/gamepad';
 import { KeyboardReader } from './input/keyboard';
 import { detectPadFamily } from './input/padLayout';
+import type { Distance } from './core/settings';
 import { findCharacter, moveToPractice, type CharacterData } from './core/characters';
 import { INITIAL_FIGHTER, moveDisplayName, noDataMove, stepFighter, type FighterState } from './core/fighter';
 import { contactReaction, fighterDataFor, type DummyMode, type FighterData } from './core/frameData';
@@ -113,6 +114,12 @@ function fighterOf(c: CharacterData | null): { data: FighterData; character: Cha
   return c !== null && data !== undefined ? { data, character: c } : null;
 }
 let fighter = fighterOf(character);
+/** 近S・遠S（c.S・f.S）があるキャラか（距離の切り替えを出すか） */
+function hasRangedMoves(f: { data: FighterData } | null): boolean {
+  return f?.data.moves.some((m) => m.input === 'c.S' || m.input === 'f.S') ?? false;
+}
+/** いま技の選びに使う距離。練習のタブは設定の値、コンボのタブはレシピに合わせた値 */
+let distance: Distance = settings.distance;
 /** キャラの状態・相手の状態と、フレームメーターの帯 */
 let fighterState: FighterState = INITIAL_FIGHTER;
 let dummyState: DummyState = INITIAL_DUMMY;
@@ -184,6 +191,7 @@ function switchPractice(next: GameProfile, nextCharacter: CharacterData | null):
   profile = next;
   character = nextCharacter;
   fighter = fighterOf(nextCharacter);
+  frameMeterView.setDistanceAvailable(hasRangedMoves(fighter));
   resetFighter();
   const { commands, notes } = practiceOf(next, nextCharacter);
   panel.setCommands(commands, notes);
@@ -245,7 +253,12 @@ const frameMeterView = createFrameMeterView(gameRoot, settings.dummyMode, (dummy
   settings = { ...settings, dummyMode };
   saveSettings(settings);
   resetFighter();
+}, settings.distance, (next) => {
+  settings = { ...settings, distance: next };
+  saveSettings(settings);
+  resetFighter();
 });
+frameMeterView.setDistanceAvailable(hasRangedMoves(fighter));
 
 const keyConfigLayer = document.createElement('div');
 keyConfigLayer.className = 'kc-layer';
@@ -295,6 +308,7 @@ const tabButtons = tabDefs.map(([tab, label]) => {
     // 相手の切り替えはコンボトライアルの間だけ固定する（設定は変えない）。前のタブの途中の状態は持ち越さない
     resetFighter();
     frameMeterView.setDummyLocked(tab === 'combo');
+    frameMeterView.setDistanceLocked(tab === 'combo');
     showTab();
     b.blur();
   });
@@ -535,7 +549,10 @@ function stepFrame(end: number): void {
   if (screens.current() === 'game') {
     const before = fighterState;
     const dummyBefore = dummyState;
-    const stepped = stepFighter(before, history, fighter, profile, profile.inputBuffer);
+    // 距離: 練習のタブは設定の値、コンボのタブはレシピの次の手に合わせる（見た目も合わせる）
+    distance = activeTab === 'combo' ? comboPanel.distanceFor(distance, before) : settings.distance;
+    frameMeterView.setDistance(distance);
+    const stepped = stepFighter(before, history, fighter, profile, profile.inputBuffer, distance);
     const hit = stepDummy(dummyState, stepped, currentDummyMode());
     fighterState = hit.fighter;
     dummyState = hit.dummy;

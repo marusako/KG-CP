@@ -8,6 +8,9 @@ import type { SimFrame, SimTrialEvent, SimTrialState } from '../core/comboSim';
 import { fighterDataFor } from '../core/frameData';
 import type { MoveFrames } from '../core/frameData';
 import type { GameProfile } from '../core/profiles';
+import type { Distance } from '../core/settings';
+import { recipeDistance } from '../core/comboDistance';
+import type { FighterState } from '../core/fighter';
 import { filterItems } from '../core/search';
 import { createSearchInput } from './searchInput';
 import type { PanelRoots } from './panelRoots';
@@ -114,6 +117,11 @@ export interface ComboPanel {
    * 判定できないレシピ（キャラなし、判定できない手を含むレシピ）は、sim を使わず入力の窓で判定する。sim はキャラがいないときなどは null
    */
   readonly step: (history: readonly FrameInput[], frame: number, sim: SimFrame | null) => void;
+  /**
+   * コンボのタブの自動の距離（決まりは recipeDistance）。次に押すのが、新しい判定なら、キャラ（fighter）がいま待っている手の技を出しているときは次の手のため、
+   * そうでなければ待っている手のため。窓の判定は待っている手のため。prev は前の値
+   */
+  readonly distanceFor: (prev: Distance, fighter: FighterState) => Distance;
   /** 最初の手からやり直す（タブを開いたときなど） */
   readonly reset: () => void;
   /** 挑戦の途中なら、最初の手に戻して理由を表示する（処理が止まったときなど）。途中でなければ何もしない */
@@ -353,6 +361,12 @@ export function createComboPanel(
   return {
     reset,
     setProfile: applyProfile,
+    distanceFor: (prev, fighter) => {
+      const index = simMoves !== null ? simState.stepIndex : state.stepIndex;
+      // 新しい判定では、キャラがすでに待っている手の技を出している（まだ当たっていない）なら、次に押すのは次の手のため
+      const waiting = simMoves !== null && fighter.move !== null && (simMoves[index]?.includes(fighter.move) ?? false);
+      return recipeDistance(current.steps.map((s) => s.input), waiting ? index + 1 : index, prev);
+    },
     invalidate: (reason) => {
       if (!inProgress()) return;
       reset();

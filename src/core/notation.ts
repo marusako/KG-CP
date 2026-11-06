@@ -10,7 +10,7 @@ export interface FollowInput {
 }
 
 export type StepInput =
-  | { kind: 'normal'; dirs: readonly Direction[]; buttons: readonly string[] }
+  | { kind: 'normal'; dirs: readonly Direction[]; buttons: readonly string[]; range?: 'close' | 'far' }
   | { kind: 'command'; command: CommandDef; buttons: readonly string[] }
   | {
       kind: 'followUp';
@@ -101,6 +101,12 @@ export function parseStep(
   }
 
   // 末尾のボタンの部分は、いちばん長く一致する名前にする（'HS' を 'S' と読み違えない）
+  // 近S・遠S（c.S・f.S）。S のあるゲーム（GG）の S にだけ付けられる。方向は 5（立ち）
+  const ranged = /^([cf])\.(.+)$/.exec(t);
+  if (ranged !== null) {
+    if (ranged[2] !== 'S' || !rules.buttons.includes('S')) return fail;
+    return { ok: true, input: { kind: 'normal', dirs: [5], buttons: ['S'], range: ranged[1] === 'c' ? 'close' : 'far' } };
+  }
   const name = [...rules.buttons, ...Object.keys(rules.buttonGroups)]
     .filter((n) => t.endsWith(n))
     .sort((a, b) => b.length - a.length)[0];
@@ -123,7 +129,7 @@ export function parseStep(
 
 /**
  * 技の入力 own（text はその表記、input は読んだもの）が、wide（手や一覧の入力）に当たるか。
- * 通常技は、技の先頭の数字（5 か 2）が wide の方向に入っていて、ボタンが wide のボタンに入っているもの。
+ * 通常技は、技の先頭の数字（5 か 2。c.S・f.S は 5）が wide の方向に入っていて、ボタンが wide のボタンに入っているもの（wide に range があれば、同じ range の技だけ）。
  * コマンドは、方向の表記が同じで、ボタンが wide のボタンに入っているもの（スト6 の P は LP・MP・HP のどれでもよい）。
  * 派生は、親が当たり、派生の方向・同時押しが同じで、派生のボタンが wide のボタンに入っているもの
  */
@@ -140,7 +146,9 @@ export function stepInputMatches(text: string, own: StepInput, wide: StepInput):
   }
   if (wide.kind === 'normal') {
     if (own.kind !== 'normal') return false;
-    const dir = Number(text.charAt(0));
+    // c.S・f.S は立ち（5）。range のある手は、同じ range の技だけに当たる（range なしの手は、どちらにも当たる）
+    const dir = /^[1-9]/.test(text) ? Number(text.charAt(0)) : 5;
+    if (wide.range !== undefined && own.range !== wide.range) return false;
     return wide.dirs.some((d) => d === dir) && own.buttons.every((b) => wide.buttons.includes(b));
   }
   return own.kind === 'command' && own.command.notation === wide.command.notation && own.buttons.every((b) => wide.buttons.includes(b));

@@ -166,14 +166,14 @@ describe('moveMatchesStep (第15段階 受け入れ条件 1)', () => {
     expect(sf('214P', '236HK')).toBe(false);
   });
 
-  it('GG: 5S は 5S だけ（5HS は別のボタン）、2HS は 2HS だけ、236K は 236K', () => {
-    expect(gg('5S', '5S')).toBe(true);
+  it('GG: 5S は c.S（第20段階で 5S を近S にした）だけ（5HS は別のボタン）、2HS は 2HS だけ、236K は 236K', () => {
+    expect(gg('5S', 'c.S')).toBe(true);
     expect(gg('5S', '5HS')).toBe(false);
     expect(gg('2S', '2S')).toBe(true);
     expect(gg('2S', '2HS')).toBe(false);
     expect(gg('2HS', '2HS')).toBe(true);
     expect(gg('2HS', '2S')).toBe(false);
-    expect(gg('2S', '5S')).toBe(false);
+    expect(gg('2S', 'c.S')).toBe(false);
     expect(gg('236K', '236K')).toBe(true);
     expect(gg('236K', '236S')).toBe(false);
   });
@@ -197,11 +197,11 @@ describe('resolveRecipe (第15段階 受け入れ条件 1)', () => {
     }
   });
 
-  it('ブリジットのコンボ（5S → 2S → 2HS → 236K）は決まる', () => {
+  it('ブリジットのコンボ（c.S → 2S → 2HS → 236K）は決まる', () => {
     const ch = CHARACTERS.find((x) => x.id === 'bridget') as CharacterData;
     const recipe = comboToRecipe(ch.combos[0]!, PROFILES.ggst)!;
     const moves = resolveRecipe(recipe, bridget.c.data, GG_RULES);
-    expect(inputsOf(moves)).toEqual([['5S'], ['2S'], ['2HS'], ['236K']]);
+    expect(inputsOf(moves)).toEqual([['c.S'], ['2S'], ['2HS'], ['236K']]);
   });
 
   it('手が P のまとめ書きなら、LP・MP・HP のうちデータにある技がすべて入る（214P）', () => {
@@ -403,9 +403,9 @@ describe('stepSimTrial: 2HP → 2MP → 236HK（コンボ 2。目押しは 2HP �
   });
 });
 
-describe('stepSimTrial: ブリジット 5S → 2S → 2HS → 236K（それぞれ前の技のヒットストップ中に入れる）', () => {
+describe('stepSimTrial: ブリジット c.S → 2S → 2HS → 236K（それぞれ前の技のヒットストップ中に入れる）', () => {
   const r = run(
-    ['5S', '2S', '2HS', '236K'],
+    ['c.S', '2S', '2HS', '236K'],
     [[0, b(5, 'S')], [10, b(2, 'S')], [35, b(2, 'HS')], ...c236(60, 'K')],
     130,
     { who: 'bridget' },

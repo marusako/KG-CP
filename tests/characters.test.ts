@@ -87,8 +87,28 @@ const CAMMY_COMBOS: [string, string, [string, Join][]][] = [
 const BRIDGET_COMBOS: [string, string, [string, Join][]][] = [
   [
     'bridget-combo-1',
-    '5S > 2S > 2HS > 236K',
-    [['5S', undefined], ['2S', 'cancel'], ['2HS', 'cancel'], ['236K', 'cancel']],
+    'c.S > 2S > 2HS > 236K',
+    [['c.S', undefined], ['2S', 'cancel'], ['2HS', 'cancel'], ['236K', 'cancel']],
+  ],
+  [
+    'bridget-combo-2',
+    'c.S > 2S > 5HS > 236K',
+    [['c.S', undefined], ['2S', 'cancel'], ['5HS', 'cancel'], ['236K', 'cancel']],
+  ],
+  [
+    'bridget-combo-3',
+    'c.S > f.S > 5HS > 236K',
+    [['c.S', undefined], ['f.S', 'cancel'], ['5HS', 'cancel'], ['236K', 'cancel']],
+  ],
+  [
+    'bridget-combo-4',
+    'c.S > f.S > 2HS > 236K',
+    [['c.S', undefined], ['f.S', 'cancel'], ['2HS', 'cancel'], ['236K', 'cancel']],
+  ],
+  [
+    'bridget-combo-5',
+    'c.S > 2S > 2HS > 236K~K',
+    [['c.S', undefined], ['2S', 'cancel'], ['2HS', 'cancel'], ['236K~K', 'cancel']],
   ],
 ];
 
@@ -302,7 +322,7 @@ describe('comboToRecipe (第6段階 受け入れ条件 4)', () => {
     const b = character('bridget');
     const r = comboToRecipe(b.combos[0]!, PROFILES.ggst);
     expect(r!.steps.map((s) => [s.text, s.window])).toEqual([
-      ['5S', null],
+      ['c.S', null],
       ['2S', { min: 0, max: 15 }],
       ['2HS', { min: 0, max: 15 }],
       ['236K', { min: 0, max: 15 }],

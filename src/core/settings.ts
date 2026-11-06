@@ -15,9 +15,13 @@ export interface Settings {
   lang: Lang;
   /** フレームメーターの相手が、技をヒットで受けるか、ガードで受けるか */
   dummyMode: DummyMode;
+  /** 相手との距離。ブリジットの立ちの S で、近S（c.S）と遠S（f.S）のどちらが出るかを決める */
+  distance: Distance;
 }
 
-export const DEFAULT_SETTINGS: Settings = { volume: 80, lastGame: null, lastCharacter: {}, lang: 'ja', dummyMode: 'hit' };
+export type Distance = 'close' | 'far';
+
+export const DEFAULT_SETTINGS: Settings = { volume: 80, lastGame: null, lastCharacter: {}, lang: 'ja', dummyMode: 'hit', distance: 'close' };
 
 /** 保存した lastCharacter を読む。そのゲームにいないキャラ・文字列でないものは捨てる */
 function parseLastCharacter(v: unknown): Settings['lastCharacter'] {
@@ -49,15 +53,17 @@ export function parseSettings(raw: string | null, fallbackLang: Lang = 'ja'): Se
   const game = findGame(obj.lastGame);
   const lang = LANGS.find((l) => l === obj.lang) ?? fallbackLang;
   const dummyMode = obj.dummyMode === 'block' ? 'block' : DEFAULT_SETTINGS.dummyMode;
+  const distance = obj.distance === 'far' ? 'far' : DEFAULT_SETTINGS.distance;
   return {
     volume,
     lastGame: game?.available ? game.id : null,
     lastCharacter: parseLastCharacter(obj.lastCharacter),
     lang,
     dummyMode,
+    distance,
   };
 }
 
 export function serializeSettings(s: Settings): string {
-  return JSON.stringify({ volume: s.volume, lastGame: s.lastGame, lastCharacter: s.lastCharacter, lang: s.lang, dummyMode: s.dummyMode });
+  return JSON.stringify({ volume: s.volume, lastGame: s.lastGame, lastCharacter: s.lastCharacter, lang: s.lang, dummyMode: s.dummyMode, distance: s.distance });
 }

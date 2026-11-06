@@ -14,7 +14,7 @@
 // - 持続が途中で切れるもの（キャミィ 236HK の `3(1)12`）は、まとめて 1 つの持続にする
 // - キャミィ 623 系の硬直 `24+16` は足す。「着地まで + 着地」という読み方は推測（FAT に説明はない）。
 //   多段の持続（SA1 の `4*3*3*3*3`、ブリジット 2S・2HS）も足す
-// - ブリジットの 5S は、このアプリが近S と遠S を分けないので近S（c.S）の値。5HS・2HS は FAT の 5H・2H
+// - ブリジットの S は、近S（c.S、入力 'c.S'）と遠S（f.S）に分ける（第20段階）。5HS・2HS は FAT の 5H・2H
 // - ブリジットの 5D は溜めない場合（発生 `20~[28]` の 20。FAT の補足に「[ ] は溜めきったときの値」とある）。
 //   632146S の発生 `9+2` は足して 11 とする（`+2` の意味は FAT に書かれていない。推測）
 // - ブリジットのジャンプの空中は、全体 41 − 跳ぶ前 4 − 着地 6 = 31（推測。全体に着地が入るかは書かれていない）
@@ -208,7 +208,10 @@ const BRIDGET: FighterData = {
   moves: [
     m('5P', 7, 2, 14, { onHit: -3, onBlock: -6, hitstop: 11, cancels: ['5P', '2P', ...BRIDGET_TO_SPECIAL] }),
     m('5K', 5, 5, 9, { onHit: 1, onBlock: -2, hitstop: 12, cancels: ['5D', '2D', ...BRIDGET_TO_SPECIAL] }),
-    m('5S', 6, 6, 13, { onHit: 13, onBlock: 1, hitstop: 14, cancels: ['2S', '5HS', '2HS', '5D', '2D', ...BRIDGET_TO_SPECIAL] }),
+    // 近S。f.S は FAT のガトリングにある（第20段階で足した。それまではデータになかった）
+    m('c.S', 6, 6, 13, { onHit: 13, onBlock: 1, hitstop: 14, cancels: ['f.S', '2S', '5HS', '2HS', '5D', '2D', ...BRIDGET_TO_SPECIAL] }),
+    // 遠S: FAT は発生 10・持続 5・硬直 18。ヒットストップ 13 は攻撃レベル 2 の推測の表の値（推測）
+    m('f.S', 9, 5, 18, { onHit: -6, onBlock: -9, hitstop: 13, cancels: ['5HS', '2HS', ...BRIDGET_TO_SPECIAL] }),
     m('5HS', 10, 5, 29, { onHit: -14, onBlock: -17, hitstop: 14, cancels: BRIDGET_TO_SPECIAL }),
     m('5D', 19, 3, 26, { onHit: 0, onBlock: -15, hitstop: 13 }),
     m('2P', 6, 4, 9, { onHit: 0, onBlock: -3, hitstop: 11, cancels: ['5P', '2P', ...BRIDGET_TO_SPECIAL] }),

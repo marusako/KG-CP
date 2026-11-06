@@ -1,6 +1,7 @@
 import { msg } from '../i18n/messages';
 import { formatAdvantage } from '../core/dummy';
 import type { DummyMode } from '../core/frameData';
+import type { Distance } from '../core/settings';
 import { isEarlyPress, labeledSegments, type FrameMeterCell, type FrameMeterState } from '../core/frameMeter';
 import { meterRuns } from '../core/inputMeter';
 import { ARROWS } from './arrows';
@@ -17,10 +18,18 @@ export interface FrameMeterView {
    * false に戻すと、設定の切り替えの見た目に戻る（コンボトライアルのタブの間だけ固定するために使う）
    */
   setDummyLocked(locked: boolean): void;
+  /** 距離の切り替えを出すか（ブリジットのように近S・遠S があるキャラのときだけ出す） */
+  setDistanceAvailable(available: boolean): void;
+  /** 選んでいる距離の見た目（コンボのタブの自動の距離も、ここで見せる） */
+  setDistance(distance: Distance): void;
+  /** true の間は、距離の切り替えを押せなくし、理由の文を出す（コンボトライアルのタブの間だけ固定するために使う） */
+  setDistanceLocked(locked: boolean): void;
 }
 
 /** 相手の切り替えの選択肢（押す順） */
 const DUMMY_MODES: readonly DummyMode[] = ['hit', 'block'];
+/** 距離の切り替えの選択肢（押す順） */
+const DISTANCES: readonly Distance[] = ['close', 'far'];
 
 /** 5 マスごとに薄い目盛り、10 マスごとに濃い目盛りをつける */
 function tickClass(index: number): string {
@@ -39,6 +48,8 @@ export function createFrameMeterView(
   root: HTMLElement,
   dummyMode: DummyMode,
   onDummyMode: (mode: DummyMode) => void,
+  distance: Distance,
+  onDistance: (distance: Distance) => void,
 ): FrameMeterView {
   const section = document.createElement('section');
   section.className = 'frame-meter-panel';
@@ -77,9 +88,43 @@ export function createFrameMeterView(
     return button;
   });
   dummyRow.append(lockedNote);
+
+  // 距離の切り替え（相手の切り替えの横）。近S・遠S があるキャラのときだけ出す
+  const distanceRow = document.createElement('div');
+  distanceRow.className = 'fm-dummy';
+  distanceRow.hidden = true;
+  const distanceLabel = document.createElement('span');
+  distanceLabel.textContent = `${msg().distanceLabel}:`;
+  distanceRow.append(distanceLabel);
+  const distanceLockedNote = document.createElement('span');
+  distanceLockedNote.className = 'fm-dummy-locked';
+  distanceLockedNote.textContent = msg().distanceLockedCombo;
+  distanceLockedNote.hidden = true;
+  let distanceLocked = false;
+  const paintDistances = () => {
+    distanceButtons.forEach((b, i) => {
+      b.classList.toggle('active', DISTANCES[i] === distance);
+      b.disabled = distanceLocked;
+    });
+    distanceLockedNote.hidden = !distanceLocked;
+  };
+  const distanceButtons = DISTANCES.map((d) => {
+    const button = document.createElement('button');
+    button.textContent = d === 'close' ? msg().distanceClose : msg().distanceFar;
+    button.addEventListener('click', () => {
+      button.blur();
+      distance = d;
+      paintDistances();
+      onDistance(d);
+    });
+    distanceRow.append(button);
+    return button;
+  });
+  distanceRow.append(distanceLockedNote);
+  paintDistances();
   const head = document.createElement('div');
   head.className = 'fm-head';
-  head.append(title, dummyRow);
+  head.append(title, dummyRow, distanceRow);
   const scroller = document.createElement('div');
   scroller.className = 'fm-scroll';
   const strip = document.createElement('div');
@@ -180,6 +225,18 @@ export function createFrameMeterView(
     setDummyLocked(next) {
       locked = next;
       paintModes();
+    },
+    setDistanceAvailable(available) {
+      distanceRow.hidden = !available;
+    },
+    setDistance(next) {
+      if (next === distance) return;
+      distance = next;
+      paintDistances();
+    },
+    setDistanceLocked(next) {
+      distanceLocked = next;
+      paintDistances();
     },
     render(state, movesText, noteText) {
       const cells = state.cells;

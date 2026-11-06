@@ -39,7 +39,8 @@ const CAMMY: Row[] = [
 const BRIDGET: Row[] = [
   ['5P', 7, 2, 14, 23],
   ['5K', 5, 5, 9, 19],
-  ['5S', 6, 6, 13, 25],
+  ['c.S', 6, 6, 13, 25], // 第20段階: 5S を近S（c.S）にした。数字は同じ
+  ['f.S', 9, 5, 18, 32], // 遠S（FAT: 発生 10・持続 5・硬直 18）
   ['5HS', 10, 5, 29, 44],
   ['5D', 19, 3, 26, 48],
   ['2P', 6, 4, 9, 19],
@@ -154,7 +155,8 @@ const CAMMY_REACTIONS: ReactionRow[] = [
 const BRIDGET_REACTIONS: ReactionRow[] = [
   ['5P', ['hitstun', 13, -3], ['blockstun', 10, -6]], // -3+2+14 / -6+2+14
   ['5K', ['hitstun', 15, 1], ['blockstun', 12, -2]], // 1+5+9 / -2+5+9
-  ['5S', ['hitstun', 32, 13], ['blockstun', 20, 1]], // 13+6+13 / 1+6+13
+  ['c.S', ['hitstun', 32, 13], ['blockstun', 20, 1]], // 13+6+13 / 1+6+13
+  ['f.S', ['hitstun', 17, -6], ['blockstun', 14, -9]], // -6+5+18 / -9+5+18
   ['5HS', ['hitstun', 20, -14], ['blockstun', 17, -17]], // -14+5+29 / -17+5+29
   ['5D', ['hitstun', 29, 0], ['blockstun', 14, -15]], // 0+3+26 / -15+3+26
   ['2P', ['hitstun', 13, 0], ['blockstun', 10, -3]], // 0+4+9 / -3+4+9
@@ -299,7 +301,8 @@ const CAMMY_CANCELS: CancelRow[] = [
 const BRIDGET_CANCELS: CancelRow[] = [
   ['5P', 11, ['5P', '2P', ...BRIDGET_SPECIAL, ...BRIDGET_SA]],
   ['5K', 12, ['5D', '2D', ...BRIDGET_SPECIAL, ...BRIDGET_SA]], // 12 は推測
-  ['5S', 14, ['2S', '5HS', '2HS', '5D', '2D', ...BRIDGET_SPECIAL, ...BRIDGET_SA]], // 14 は推測
+  ['c.S', 14, ['f.S', '2S', '5HS', '2HS', '5D', '2D', ...BRIDGET_SPECIAL, ...BRIDGET_SA]], // 14 は推測。f.S は第20段階（FAT のガトリング）
+  ['f.S', 13, ['5HS', '2HS', ...BRIDGET_SPECIAL, ...BRIDGET_SA]], // 13 は攻撃レベル 2 の推測の表
   ['5HS', 14, [...BRIDGET_SPECIAL, ...BRIDGET_SA]],
   ['5D', 13, null],
   ['2P', 11, ['5P', '2P', ...BRIDGET_SPECIAL, ...BRIDGET_SA]],

@@ -180,6 +180,11 @@ const ja = {
   /** 通常技の名前。スト6 のボタンは弱・中・強で書く（GG のボタンはそのまま） */
   normalMoveName: (posture: 'stand' | 'crouch', button: string) =>
     `${posture === 'stand' ? '立ち' : 'しゃがみ'}${JA_STRENGTH[button] ?? button}`,
+  rangedMoveName: (range: 'close' | 'far', button: string) => `${range === 'close' ? '近' : '遠'}${button}`,
+  distanceLabel: '距離',
+  distanceClose: '近い',
+  distanceFar: '遠い',
+  distanceLockedCombo: 'コンボトライアル中はレシピに合わせる',
   // 発生は FAT と同じ数え方（発生前 + 1）で出す。name は技名と入力（例: 立ち弱P (5LP)）
   moveMeterText: (name: string, m: MoveFrames) =>
     `${name} — 発生 ${m.startup + 1}F / 持続 ${m.active}F / 硬直 ${m.recovery}F / 全体 ${m.startup + m.active + m.recovery}F`,
@@ -387,6 +392,11 @@ const en: Messages = {
   meterRunsText: runsText,
   moveMeterNoCharacter: 'Choose a character to see move frames',
   normalMoveName: (posture, button) => `${posture === 'stand' ? 'Standing' : 'Crouching'} ${button}`,
+  rangedMoveName: (range, button) => `${range === 'close' ? 'Close' : 'Far'} ${button}`,
+  distanceLabel: 'Distance',
+  distanceClose: 'Close',
+  distanceFar: 'Far',
+  distanceLockedCombo: 'Follows the recipe during combo trials',
   moveMeterText: (name, m) =>
     `${name} — Startup ${m.startup + 1}F / Active ${m.active}F / Recovery ${m.recovery}F / Total ${m.startup + m.active + m.recovery}F`,
   metricsLabel: ' Metrics',
