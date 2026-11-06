@@ -116,7 +116,11 @@ const ja = {
   comboJsonSummary: 'JSON で読み込む・書き出す',
   comboIdle: '最初の手を入力してください',
   comboNoMatch: '当たるコンボがありません',
-  comboCharacterNote: 'キャラのコンボの窓は仮の値です',
+  comboCharacterNote: 'キャラを選んでいるときは、相手に当たってつながったかで判定します（相手はヒットに固定）',
+  comboConnect: 'つなぐ',
+  comboWindowFallback: 'このレシピは、フレームデータで判定できない手を含むので、入力のタイミングの窓で判定します',
+  comboTiming: (offset: number, window: number) =>
+    offset >= 0 ? `最速 +${offset}F（猶予 ${window}F）` : `先行入力 ${-offset}F 前（猶予 ${window}F）`,
   comboStart: '開始',
   comboWindow: (min: number, max: number) => `${min}〜${max}F`,
   comboStats: (attempts: number, completes: number, rate: string) =>
@@ -126,6 +130,9 @@ const ja = {
   comboStepFail: (n: number, reason: string) => `${n}手目 失敗: ${reason}`,
   dropEarly: (frames: number) => `早い（あと ${frames}F 遅く）`,
   dropLate: (min: number, max: number) => `遅い（窓は ${min}〜${max}F）`,
+  dropLateBy: (frames: number) => `遅い（${frames}F 遅い）`,
+  dropLateRecovered: '遅い（相手が動けるようになった）',
+  dropEarlyLost: '早い（先行入力の前に押して、入力が消えた）',
   dropWrong: '違う入力',
   hitBuffered: (shown: string, frames: number) => `${shown}（先行 ${frames}F）`,
   jsonUnreadable: (error: string) => `JSON として読めません: ${error}`,
@@ -145,6 +152,7 @@ const ja = {
   dummyLabel: '相手',
   dummyHit: 'ヒット',
   dummyBlock: 'ガード',
+  dummyLockedCombo: 'コンボトライアル中はヒットに固定',
   noReactionData: '相手の反応のデータなし',
   contactText: (c: Contact) =>
     `${c.kind === 'block' ? 'ガード' : c.knockdown ? 'ダウン' : 'ヒット'}${
@@ -305,7 +313,11 @@ const en: Messages = {
   comboJsonSummary: 'Load / export JSON',
   comboIdle: 'Enter the first step',
   comboNoMatch: 'No matching combos',
-  comboCharacterNote: 'Combo windows for characters are provisional values',
+  comboCharacterNote: 'With a character selected, steps are judged by whether they hit and combo (the opponent is fixed to Hit)',
+  comboConnect: 'Connect',
+  comboWindowFallback: 'This recipe has steps the frame data cannot judge, so it is judged by input timing windows',
+  comboTiming: (offset, window) =>
+    offset >= 0 ? `+${offset}F from earliest (window ${window}F)` : `Buffered ${-offset}F early (window ${window}F)`,
   comboStart: 'Start',
   comboWindow: (min, max) => `${min}-${max}F`,
   comboStats: (attempts, completes, rate) => `Attempts ${attempts} / Completed ${completes} / Rate ${rate}`,
@@ -314,6 +326,9 @@ const en: Messages = {
   comboStepFail: (n, reason) => `Step ${n} failed: ${reason}`,
   dropEarly: (frames) => `Too early (press ${frames}F later)`,
   dropLate: (min, max) => `Too late (window ${min}-${max}F)`,
+  dropLateBy: (frames) => `Too late (${frames}F late)`,
+  dropLateRecovered: 'Too late (the opponent recovered)',
+  dropEarlyLost: 'Too early (pressed before the input buffer, the input was lost)',
   dropWrong: 'Wrong input',
   hitBuffered: (shown, frames) => `${shown} (buffered ${frames}F early)`,
   jsonUnreadable: (error) => `Could not read as JSON: ${error}`,
@@ -332,6 +347,7 @@ const en: Messages = {
   dummyLabel: 'Opponent',
   dummyHit: 'Hit',
   dummyBlock: 'Block',
+  dummyLockedCombo: 'Fixed to Hit during combo trials',
   noReactionData: 'No reaction data',
   contactText: (c) =>
     `${c.kind === 'block' ? 'Block' : c.knockdown ? 'Knockdown' : 'Hit'}${

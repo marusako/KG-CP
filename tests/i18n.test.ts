@@ -63,6 +63,8 @@ const SPECIAL_ARGS: Readonly<Record<string, readonly unknown[]>> = {
   frameMeterMoves: [['A', 'B']],
   // 第13段階: 当たり方の文（Contact を受け取る）
   contactText: [{ kind: 'hit', knockdown: false, combo: false, advantage: 5 }],
+  // 第15段階: マイナス（先行入力）の枝も、日英のキーの確認・日本語の確認にかける
+  comboTiming: [-3, 13],
 };
 
 /** 関数は代表の引数（数）で呼んで文字列にする。入れ子のオブジェクトは辿る */
@@ -389,5 +391,45 @@ describe('第14段階: キャンセルの文・凡例', () => {
     expect(msg('en').frameMeterLegend).toContain('White: hitstop (both freeze)');
     expect(msg('ja').frameMeterLegend).toContain('緑: 発生');
     expect(msg('ja').frameMeterLegend).toContain('黄: 相手の硬直　紫: 相手のダウン');
+  });
+});
+
+describe('第15段階の文（コンボトライアルの新しい判定）', () => {
+  const m = () => msg();
+
+  it('comboTiming: 0 以上は「最速 +N F」、マイナスは「先行入力 N F 前」（ja・en）', () => {
+    setLang('ja');
+    expect(m().comboTiming(0, 2)).toBe('最速 +0F（猶予 2F）');
+    expect(m().comboTiming(10, 13)).toBe('最速 +10F（猶予 13F）');
+    expect(m().comboTiming(-4, 2)).toBe('先行入力 4F 前（猶予 2F）');
+    setLang('en');
+    expect(m().comboTiming(0, 2)).toBe('+0F from earliest (window 2F)');
+    expect(m().comboTiming(10, 13)).toBe('+10F from earliest (window 13F)');
+    expect(m().comboTiming(-4, 2)).toBe('Buffered 4F early (window 2F)');
+  });
+
+  it('遅い・早いの文（ja・en）', () => {
+    setLang('ja');
+    expect(m().dropLateBy(2)).toBe('遅い（2F 遅い）');
+    expect(m().dropLateRecovered).toBe('遅い（相手が動けるようになった）');
+    expect(m().dropEarlyLost).toBe('早い（先行入力の前に押して、入力が消えた）');
+    expect(m().dropEarly(3)).toBe('早い（あと 3F 遅く）');
+    setLang('en');
+    expect(m().dropLateBy(2)).toBe('Too late (2F late)');
+    expect(m().dropLateRecovered).toBe('Too late (the opponent recovered)');
+    expect(m().dropEarlyLost).toBe('Too early (pressed before the input buffer, the input was lost)');
+  });
+
+  it('つなぐ・窓の判定の知らせ・注記・ヒット固定の文（ja・en）', () => {
+    setLang('ja');
+    expect(m().comboConnect).toBe('つなぐ');
+    expect(m().comboWindowFallback).toBe('このレシピは、フレームデータで判定できない手を含むので、入力のタイミングの窓で判定します');
+    expect(m().comboCharacterNote).toBe('キャラを選んでいるときは、相手に当たってつながったかで判定します（相手はヒットに固定）');
+    expect(m().dummyLockedCombo).toBe('コンボトライアル中はヒットに固定');
+    setLang('en');
+    expect(m().comboConnect).toBe('Connect');
+    expect(m().comboWindowFallback).toBe('This recipe has steps the frame data cannot judge, so it is judged by input timing windows');
+    expect(m().comboCharacterNote).toBe('With a character selected, steps are judged by whether they hit and combo (the opponent is fixed to Hit)');
+    expect(m().dummyLockedCombo).toBe('Fixed to Hit during combo trials');
   });
 });

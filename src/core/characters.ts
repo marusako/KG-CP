@@ -42,7 +42,7 @@ export interface CharacterData {
 
 /**
  * コンボの窓。つなぎ（link）とキャンセル（cancel）ごとの、ゆるい仮の値。
- * フレームデータからの正確な窓は、あとの段で扱う
+ * 相手に当たってつながったかで判定できないレシピ（窓の判定になったとき）にだけ使う
  */
 export const LOOSE_WINDOWS = {
   link: { min: 4, max: 20 },
@@ -88,7 +88,7 @@ const CAMMY: CharacterData = {
     {
       id: 'cammy-combo-1',
       name: { en: '2LK > 2LP > 623HK' },
-      steps: [{ input: '2LK' }, { input: '2LP', join: 'link' }, { input: '623HK', join: 'cancel' }],
+      steps: [{ input: '2LK' }, { input: '2LP', join: 'cancel' }, { input: '623HK', join: 'cancel' }],
       source: 'Sportskeeda のキャミィのコンボガイド',
     },
     {

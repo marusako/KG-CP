@@ -67,7 +67,7 @@ const BRIDGET_MOVES: MoveRow[] = [
 
 type Join = 'link' | 'cancel' | undefined;
 const CAMMY_COMBOS: [string, string, [string, Join][]][] = [
-  ['cammy-combo-1', '2LK > 2LP > 623HK', [['2LK', undefined], ['2LP', 'link'], ['623HK', 'cancel']]],
+  ['cammy-combo-1', '2LK > 2LP > 623HK', [['2LK', undefined], ['2LP', 'cancel'], ['623HK', 'cancel']]],
   ['cammy-combo-2', '2HP > 2MP > 236HK', [['2HP', undefined], ['2MP', 'link'], ['236HK', 'cancel']]],
   ['cammy-combo-3', '2MP > 214LP', [['2MP', undefined], ['214LP', 'cancel']]],
 ];
@@ -248,12 +248,25 @@ describe('moveToCommand (第6段階 受け入れ条件 3)', () => {
   });
 });
 
+describe('キャミィのコンボ 1 の join (第15段階 受け入れ条件 4)', () => {
+  it('2LK → 2LP → 623HK の 2 手目（2LP）の join が cancel（2LK のヒット +3 と 2LP の発生 4 では目押しにならない）', () => {
+    const combo = character('cammy').combos.find((x) => x.id === 'cammy-combo-1')!;
+    expect(combo.steps.map((s) => s.input)).toEqual(['2LK', '2LP', '623HK']);
+    expect(combo.steps[1]!.join).toBe('cancel');
+  });
+
+  it('キャミィのコンボ 2 の 2MP は link のまま（目押し）', () => {
+    const combo = character('cammy').combos.find((x) => x.id === 'cammy-combo-2')!;
+    expect(combo.steps[1]!.join).toBe('link');
+  });
+});
+
 describe('comboToRecipe (第6段階 受け入れ条件 4)', () => {
   it('LOOSE_WINDOWS は つなぎ [4,20]・キャンセル [0,15]', () => {
     expect(LOOSE_WINDOWS).toEqual({ link: { min: 4, max: 20 }, cancel: { min: 0, max: 15 } });
   });
 
-  it('cammy-combo-1: 最初の手は窓なし、つなぎ [4,20]、キャンセル [0,15]', () => {
+  it('cammy-combo-1: 最初の手は窓なし、2LP も 623HK もキャンセル [0,15]（第15段階: 2LP は目押しにならないのでチェーン）', () => {
     const c = character('cammy');
     const r = comboToRecipe(c.combos[0]!, PROFILES.sf6);
     expect(r).not.toBeNull();
@@ -261,7 +274,7 @@ describe('comboToRecipe (第6段階 受け入れ条件 4)', () => {
     expect(r!.name).toBe('2LK > 2LP > 623HK');
     expect(r!.steps.map((s) => [s.text, s.window])).toEqual([
       ['2LK', null],
-      ['2LP', { min: 4, max: 20 }],
+      ['2LP', { min: 0, max: 15 }],
       ['623HK', { min: 0, max: 15 }],
     ]);
   });

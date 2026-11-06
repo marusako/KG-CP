@@ -3,6 +3,10 @@ import { initialTrialState, isAttemptInProgress, parseRecipe, stepTrial } from '
 import type { ComboRecipe, TrialEvent, TrialState } from '../core/combo';
 import { comboToRecipe } from '../core/characters';
 import type { CharacterData } from '../core/characters';
+import { initialSimTrial, resolveRecipe, stepSimTrial } from '../core/comboSim';
+import type { SimFrame, SimTrialEvent, SimTrialState } from '../core/comboSim';
+import { fighterDataFor } from '../core/frameData';
+import type { MoveFrames } from '../core/frameData';
 import type { GameProfile } from '../core/profiles';
 import { filterItems } from '../core/search';
 import { createSearchInput } from './searchInput';
@@ -29,8 +33,20 @@ export function describeDrop(
   }
 }
 
+/** 相手に当たってつながったかの判定での、失敗の理由の文。frames は「遅い」「早い」のフレーム数（分からなければ null） */
+export function describeSimDrop(e: Extract<SimTrialEvent, { type: 'drop' }>): string {
+  switch (e.reason) {
+    case 'early':
+      return e.frames === null ? msg().dropEarlyLost : msg().dropEarly(e.frames);
+    case 'late':
+      return e.frames === null ? msg().dropLateRecovered : msg().dropLateBy(e.frames);
+    case 'wrong':
+      return msg().dropWrong;
+  }
+}
+
 /**
- * 成功した手の下に出す文。offset は前の手の基準からのフレーム数（最初の手は null）。
+ * 窓の判定で成功した手の下に出す文。offset は前の手の基準からのフレーム数（最初の手は null）。
  * 窓より早い成功（先行入力）は、何 F 早かったかも出す。前の手が先行入力だと offset はマイナスになりうる
  */
 export function describeHit(offset: number | null, window: { min: number; max: number } | null): string {
@@ -92,8 +108,12 @@ function save(profile: GameProfile, characterId: string | undefined, recipes: re
 }
 
 export interface ComboPanel {
-  /** 1フレーム進める。コンボトライアルのタブが開いているときだけ呼ぶ */
-  readonly step: (history: readonly FrameInput[], frame: number) => void;
+  /**
+   * 1フレーム進める。コンボトライアルのタブが開いているときだけ呼ぶ。
+   * 選んでいるレシピがフレームデータで判定できるなら、sim（キャラと相手の動き）で「相手に当たってつながったか」を判定する。
+   * 判定できないレシピ（キャラなし、判定できない手を含むレシピ）は、sim を使わず入力の窓で判定する。sim はキャラがいないときなどは null
+   */
+  readonly step: (history: readonly FrameInput[], frame: number, sim: SimFrame | null) => void;
   /** 最初の手からやり直す（タブを開いたときなど） */
   readonly reset: () => void;
   /** 挑戦の途中なら、最初の手に戻して理由を表示する（処理が止まったときなど）。途中でなければ何もしない */
@@ -157,20 +177,26 @@ export function createComboPanel(
   result.className = 'result';
   const stats = document.createElement('div');
   stats.className = 'note';
-  status.append(currentName, stepsView, result, stats);
+  const fallbackNote = document.createElement('div');
+  fallbackNote.className = 'note';
+  status.append(currentName, fallbackNote, stepsView, result, stats);
   roots.status.append(status);
 
   let profile = initialProfile;
   let characterId: string | undefined;
+  let character: CharacterData | undefined;
   let samples: readonly ComboRecipe[] = [];
   let saved: SavedData = { recipes: [], unreadable: [] };
   let recipes: ComboRecipe[] = [];
   let current = initialProfile.samples[0] as ComboRecipe;
   let state: TrialState = initialTrialState();
+  /** 相手に当たってつながったかで判定するときの、手ごとの技の一覧（resolveRecipe）。窓の判定なら null */
+  let simMoves: readonly (readonly MoveFrames[])[] | null = null;
+  let simState: SimTrialState = initialSimTrial();
   let attempts = 0;
   let completes = 0;
   /** 手ごとの表示状態 */
-  let marks: ({ kind: 'hit'; offset: number | null } | { kind: 'drop'; text: string } | null)[] = [];
+  let marks: ({ kind: 'hit' | 'drop'; text: string } | null)[] = [];
 
   const idleText = () => msg().comboIdle;
 
@@ -182,14 +208,14 @@ export function createComboPanel(
         const mark = marks[i];
         if (mark?.kind === 'hit') box.classList.add('hit');
         else if (mark?.kind === 'drop') box.classList.add('drop');
-        else if (i === state.stepIndex) box.classList.add('next');
+        else if (i === (simMoves !== null ? simState.stepIndex : state.stepIndex)) box.classList.add('next');
         const name = document.createElement('div');
         name.textContent = s.text;
         const sub = document.createElement('div');
         sub.className = 'note';
-        if (mark?.kind === 'hit') sub.textContent = describeHit(mark.offset, s.window);
-        else if (mark?.kind === 'drop') sub.textContent = mark.text;
-        else sub.textContent = s.window ? msg().comboWindow(s.window.min, s.window.max) : msg().comboStart;
+        if (mark !== null && mark !== undefined) sub.textContent = mark.text;
+        else if (i === 0) sub.textContent = msg().comboStart;
+        else sub.textContent = simMoves !== null ? msg().comboConnect : s.window ? msg().comboWindow(s.window.min, s.window.max) : msg().comboStart;
         box.append(name, sub);
         return box;
       }),
@@ -201,10 +227,17 @@ export function createComboPanel(
     stats.textContent = msg().comboStats(attempts, completes, rate);
   };
 
-  /** 最初の手に戻す。レシピを選び直したときも必ず通るので、状態表示の見出しもここで合わせる */
+  /** 挑戦の途中か（どちらの判定でも） */
+  const inProgress = () => (simMoves !== null ? simState.stepIndex > 0 : isAttemptInProgress(state));
+
+  /** 最初の手に戻す。レシピを選び直したときも必ず通るので、状態表示の見出しと、どちらの判定にするかもここで合わせる */
   const reset = () => {
     currentName.textContent = current.name;
+    const data = character === undefined ? undefined : fighterDataFor(character.id);
+    simMoves = data === undefined ? null : resolveRecipe(current, data, profile);
+    fallbackNote.textContent = data !== undefined && simMoves === null ? msg().comboWindowFallback : '';
     state = initialTrialState();
+    simState = initialSimTrial();
     marks = [];
     result.className = 'result';
     result.textContent = idleText();
@@ -287,15 +320,16 @@ export function createComboPanel(
   search.addEventListener('input', renderList);
 
   /** ゲーム（とキャラ）に合わせて、レシピの一覧と保存データを読み直す */
-  const applyProfile = (next: GameProfile, character?: CharacterData) => {
+  const applyProfile = (next: GameProfile, nextCharacter?: CharacterData) => {
     profile = next;
-    characterId = character?.id;
+    characterId = nextCharacter?.id;
+    character = nextCharacter;
     // キャラのコンボは、読めないものがあれば出さない。一覧が 0 件にならないことは、データのテスト
     // （tests/characters.test.ts の「キャラを足すときの守り」）で確かめている
-    samples = character
-      ? character.combos.flatMap((c) => comboToRecipe(c, next) ?? [])
+    samples = nextCharacter
+      ? nextCharacter.combos.flatMap((c) => comboToRecipe(c, next) ?? [])
       : next.samples;
-    listNote.textContent = character ? msg().comboCharacterNote : '';
+    listNote.textContent = nextCharacter ? msg().comboCharacterNote : '';
     search.value = '';
     saved = loadSaved(next, characterId, new Set(samples.map((s) => s.id)));
     recipes = [...samples, ...saved.recipes];
@@ -320,37 +354,56 @@ export function createComboPanel(
     reset,
     setProfile: applyProfile,
     invalidate: (reason) => {
-      if (!isAttemptInProgress(state)) return;
+      if (!inProgress()) return;
       reset();
       result.className = 'result ng';
       result.textContent = reason;
     },
-    step: (history, frame) => {
-      const out = stepTrial(state, current, history, frame, profile.inputBuffer);
-      const prev = state;
-      state = out.state;
-      const e = out.event;
-      if (!e) return;
-      if (prev.stepIndex === 0) {
+    step: (history, frame, sim) => {
+      const prevIndex = simMoves !== null ? simState.stepIndex : state.stepIndex;
+      let hit: { stepIndex: number; complete: boolean; text: string } | null = null;
+      let drop: { stepIndex: number; text: string } | null = null;
+      if (simMoves !== null) {
+        if (sim === null) return;
+        const out = stepSimTrial(simState, simMoves, sim, profile.inputBuffer);
+        simState = out.state;
+        const e = out.event;
+        if (e === null) return;
+        if (e.type === 'drop') drop = { stepIndex: e.stepIndex, text: describeSimDrop(e) };
+        else {
+          const text = e.timing === null ? 'OK' : msg().comboTiming(e.timing.offset, e.timing.window);
+          hit = { stepIndex: e.stepIndex, complete: e.type === 'complete', text };
+        }
+      } else {
+        const out = stepTrial(state, current, history, frame, profile.inputBuffer);
+        state = out.state;
+        const e = out.event;
+        if (e === null) return;
+        if (e.type === 'drop') drop = { stepIndex: e.stepIndex, text: describeDrop(e, current, profile.inputBuffer) };
+        else {
+          const text = describeHit(e.offset, current.steps[e.stepIndex]?.window ?? null);
+          hit = { stepIndex: e.stepIndex, complete: e.type === 'complete', text };
+        }
+      }
+      if (prevIndex === 0) {
         // 新しい挑戦の開始
         marks = [];
         attempts++;
       }
-      if (e.type === 'hit' || e.type === 'complete') {
-        marks[e.stepIndex] = { kind: 'hit', offset: e.offset };
-        if (e.type === 'complete') {
+      if (hit !== null) {
+        marks[hit.stepIndex] = { kind: 'hit', text: hit.text };
+        if (hit.complete) {
           completes++;
           result.className = 'result ok';
           result.textContent = msg().comboComplete;
         } else {
           result.className = 'result';
-          result.textContent = msg().comboStepOk(e.stepIndex + 1);
+          result.textContent = msg().comboStepOk(hit.stepIndex + 1);
         }
-      } else {
-        const text = describeDrop(e, current, profile.inputBuffer);
-        marks[e.stepIndex] = { kind: 'drop', text };
+      } else if (drop !== null) {
+        marks[drop.stepIndex] = { kind: 'drop', text: drop.text };
         result.className = 'result ng';
-        result.textContent = msg().comboStepFail(e.stepIndex + 1, text);
+        result.textContent = msg().comboStepFail(drop.stepIndex + 1, drop.text);
       }
       renderStats();
       renderSteps();

@@ -11,6 +11,11 @@ export interface FrameMeterView {
    * 右端に帯の advantage（有利フレーム）を出す。movesText は技の並びの文（技がなければ空）、noCharacter はキャラなしのとき true（案内を足す）
    */
   render(state: FrameMeterState, movesText: string, noCharacter: boolean): void;
+  /**
+   * true の間は、相手の切り替えを押せなくし（disabled）、「ヒット」を選んだ見た目にして、横に固定の理由の文を出す。
+   * false に戻すと、設定の切り替えの見た目に戻る（コンボトライアルのタブの間だけ固定するために使う）
+   */
+  setDummyLocked(locked: boolean): void;
 }
 
 /** 相手の切り替えの選択肢（押す順） */
@@ -43,6 +48,20 @@ export function createFrameMeterView(
   const dummyLabel = document.createElement('span');
   dummyLabel.textContent = `${msg().dummyLabel}:`;
   dummyRow.append(dummyLabel);
+  const lockedNote = document.createElement('span');
+  lockedNote.className = 'fm-dummy-locked';
+  lockedNote.textContent = msg().dummyLockedCombo;
+  lockedNote.hidden = true;
+  let locked = false;
+  /** 選んでいる切り替えの見た目（固定の間は「ヒット」） */
+  const paintModes = () => {
+    const shownMode = locked ? 'hit' : dummyMode;
+    modeButtons.forEach((b, i) => {
+      b.classList.toggle('active', DUMMY_MODES[i] === shownMode);
+      b.disabled = locked;
+    });
+    lockedNote.hidden = !locked;
+  };
   const modeButtons = DUMMY_MODES.map((mode) => {
     const button = document.createElement('button');
     button.textContent = mode === 'hit' ? msg().dummyHit : msg().dummyBlock;
@@ -50,12 +69,13 @@ export function createFrameMeterView(
     button.addEventListener('click', () => {
       button.blur();
       dummyMode = mode;
-      modeButtons.forEach((b, i) => b.classList.toggle('active', DUMMY_MODES[i] === mode));
+      paintModes();
       onDummyMode(mode);
     });
     dummyRow.append(button);
     return button;
   });
+  dummyRow.append(lockedNote);
   const head = document.createElement('div');
   head.className = 'fm-head';
   head.append(title, dummyRow);
@@ -156,6 +176,10 @@ export function createFrameMeterView(
   }
 
   return {
+    setDummyLocked(next) {
+      locked = next;
+      paintModes();
+    },
     render(state, movesText, noCharacter) {
       const cells = state.cells;
       const empty = cells.length === 0;

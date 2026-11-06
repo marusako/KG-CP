@@ -24,8 +24,9 @@ import { KeyboardReader } from './input/keyboard';
 import { detectPadFamily } from './input/padLayout';
 import { findCharacter, moveToCommand, type CharacterData } from './core/characters';
 import { INITIAL_FIGHTER, moveDisplayName, stepFighter, type FighterState } from './core/fighter';
-import { contactReaction, fighterDataFor, type FighterData } from './core/frameData';
+import { contactReaction, fighterDataFor, type DummyMode, type FighterData } from './core/frameData';
 import { INITIAL_DUMMY, stepDummy, type DummyState } from './core/dummy';
+import type { SimFrame } from './core/comboSim';
 import { EMPTY_FRAME_METER, stepFrameMeter, stopFrameMeter, syncMoveTexts, type FrameMeterState } from './core/frameMeter';
 import { PROFILES, profileFor, type GameProfile, type PlayableGameId } from './core/profiles';
 import type { GameId } from './core/games';
@@ -251,6 +252,9 @@ const tabButtons = tabDefs.map(([tab, label]) => {
   b.addEventListener('click', () => {
     activeTab = tab;
     comboPanel.reset();
+    // 相手の切り替えはコンボトライアルの間だけ固定する（設定は変えない）。前のタブの途中の状態は持ち越さない
+    resetFighter();
+    frameMeterView.setDummyLocked(tab === 'combo');
     showTab();
     b.blur();
   });
@@ -421,10 +425,15 @@ function refreshPad(): void {
   }
 }
 
+/** いまの相手の切り替え。コンボトライアルのタブの間は「ヒット」に固定（設定の dummyMode は変えない） */
+function currentDummyMode(): DummyMode {
+  return activeTab === 'combo' ? 'hit' : settings.dummyMode;
+}
+
 /** 技の文の後ろにつける結果（キャンセルで出した技の頭には、updateMoveTexts が cancelPrefix を付ける）。当たったら当たり方、いまの切り替えで反応のデータがなければその知らせ、そうでなければ空 */
 function resultText(start: FrameMeterState['starts'][number]): string {
   if (start.contact !== undefined) return ` / ${msg().contactText(start.contact)}`;
-  return contactReaction(start.move, settings.dummyMode) === null ? ` / ${msg().noReactionData}` : '';
+  return contactReaction(start.move, currentDummyMode()) === null ? ` / ${msg().noReactionData}` : '';
 }
 
 /**
@@ -475,24 +484,28 @@ function stepFrame(end: number): void {
   history.push({ dir, buttons });
   if (history.length > MAX_FRAMES) history.shift();
 
+  // 練習画面の外では、キャラも帯も進めない（入ると最初に戻すので、外の入力は残らない）
+  let sim: SimFrame | null = null;
+  if (screens.current() === 'game') {
+    const before = fighterState;
+    const dummyBefore = dummyState;
+    const stepped = stepFighter(before, history, fighter, profile, profile.inputBuffer);
+    const hit = stepDummy(dummyState, stepped, currentDummyMode());
+    fighterState = hit.fighter;
+    dummyState = hit.dummy;
+    if (fighter !== null) sim = { frame, before, after: hit.fighter, dummyBefore, dummyAfter: hit.dummy, contact: hit.contact };
+    const prevMeter = frameMeter;
+    frameMeter = stepFrameMeter(prevMeter, before, fighterState, history, { dummy: dummyState, contact: hit.contact });
+    if (frameMeter !== prevMeter) updateMoveTexts(prevMeter);
+  }
+  // コンボトライアルは、キャラと相手の動きが決まったあとに判定する（相手に当たってつながったかを見るため）
   if (activeTab === 'combo') {
-    comboPanel.step(history, frame);
+    comboPanel.step(history, frame, sim);
   } else {
     const result = analyzeAttempt(history, panel.selected());
     if (result) panel.showResult(result);
   }
   frame++;
-  // 練習画面の外では、キャラも帯も進めない（入ると最初に戻すので、外の入力は残らない）
-  if (screens.current() === 'game') {
-    const before = fighterState;
-    const stepped = stepFighter(before, history, fighter, profile, profile.inputBuffer);
-    const hit = stepDummy(dummyState, stepped, settings.dummyMode);
-    fighterState = hit.fighter;
-    dummyState = hit.dummy;
-    const prevMeter = frameMeter;
-    frameMeter = stepFrameMeter(prevMeter, before, fighterState, history, { dummy: dummyState, contact: hit.contact });
-    if (frameMeter !== prevMeter) updateMoveTexts(prevMeter);
-  }
   renderHistory(compressHistory(history, HISTORY_ROWS));
 }
 

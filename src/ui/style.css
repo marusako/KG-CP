@@ -68,6 +68,8 @@ textarea { display: block; box-sizing: border-box; width: 100%; margin: 8px 0; b
 .fm-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
 .fm-dummy { display: flex; gap: 6px; align-items: center; font-size: 13px; color: #9aa; }
 .fm-dummy button.active { background: #3a5a9a; }
+.fm-dummy button:disabled { cursor: not-allowed; opacity: 0.7; }
+.fm-dummy-locked { color: #e0b44c; }
 .fm-band { display: flex; align-items: flex-start; }
 .fm-band .fm-scroll { flex: 1 1 auto; min-width: 0; }
 .fm-advantage { flex: 0 0 auto; min-width: 4ch; padding: 20px 0 0 8px; font-size: 18px; font-weight: bold; text-align: right; font-variant-numeric: tabular-nums; }
