@@ -34,6 +34,8 @@ export function commandSearchTexts(c: CommandDef): string[] {
 export interface CommandPanel {
   readonly selected: () => CommandDef;
   readonly showResult: (r: AttemptResult) => void;
+  /** 判定の文の下に、出た技の文を 1 行で出す（null で消す） */
+  readonly showOutcome: (text: string | null) => void;
   /** 一覧を入れ替え、先頭を選ぶ（成功率も数え直し、検索欄は空に戻す）。notes は技の id → 注記 */
   readonly setCommands: (commands: readonly CommandDef[], notes?: ReadonlyMap<string, string>) => void;
 }
@@ -63,8 +65,11 @@ export function createCommandPanel(
   result.className = 'result';
   result.textContent = msg().practiceIdle;
   const rate = document.createElement('div');
+  const outcome = document.createElement('div');
+  outcome.className = 'outcome';
+  outcome.hidden = true;
   rate.className = 'note';
-  status.append(currentName, moveNote, result, rate);
+  status.append(currentName, moveNote, result, outcome, rate);
   roots.status.append(status);
 
   let all = commands;
@@ -86,8 +91,14 @@ export function createCommandPanel(
     moveNote.textContent = notes.get(current.id) ?? '';
   };
 
+  const showOutcome = (text: string | null) => {
+    outcome.hidden = text === null;
+    outcome.textContent = text ?? '';
+  };
+
   const resetView = () => {
     recent = [];
+    showOutcome(null);
     result.className = 'result';
     result.textContent = msg().practiceIdle;
     updateRate();
@@ -135,6 +146,7 @@ export function createCommandPanel(
       renderList();
       resetView();
     },
+    showOutcome,
     showResult: (r) => {
       result.className = `result ${r.ok ? 'ok' : 'ng'}`;
       result.textContent = describeResult(r);

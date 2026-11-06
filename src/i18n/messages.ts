@@ -104,6 +104,14 @@ const ja = {
   practiceSearchPlaceholder: '名前・表記で絞り込み（例: 236、spiral）',
   practiceIdle: 'ボタンを押すと判定します',
   practiceNoMatch: '当たる技がありません',
+
+  // 出た技（コマンド練習）
+  outcomeMove: (name: string, via: 'direct' | 'buffer' | 'cancel', different: boolean) =>
+    `出た技: ${name}${via === 'buffer' ? '（先行入力）' : via === 'cancel' ? '（キャンセル）' : ''}${different ? '（選んだ技と違う）' : ''}`,
+  outcomeNone: (reason: 'noMove' | 'air' | 'bufferLost') =>
+    `技は出ませんでした${reason === 'air' ? '（空中では出せません）' : reason === 'bufferLost' ? '（先行入力が切れた）' : ''}`,
+  outcomePending: '出た技: 待っています（技の途中に押したので、動けるようになったら出ます）',
+  outcomeNoData: 'この技はフレームデータがないので、出る技は分かりません',
   recentRateNone: '直近の成功率: -',
   recentRate: (percent: number, ok: number, total: number) => `直近の成功率: ${percent}%（${ok}/${total}）`,
 
@@ -302,6 +310,13 @@ const en: Messages = {
   practiceSearchPlaceholder: 'Filter by name or notation (e.g. 236, spiral)',
   practiceIdle: 'Press a button to check',
   practiceNoMatch: 'No matching moves',
+
+  outcomeMove: (name, via, different) =>
+    `Came out: ${name}${via === 'buffer' ? ' (buffered)' : via === 'cancel' ? ' (cancel)' : ''}${different ? ' (not the selected move)' : ''}`,
+  outcomeNone: (reason) =>
+    `No move came out${reason === 'air' ? ' (cannot be used in the air)' : reason === 'bufferLost' ? ' (the input buffer expired)' : ''}`,
+  outcomePending: 'Came out: waiting (pressed during a move; it comes out when you can act)',
+  outcomeNoData: 'This move has no frame data, so the move that comes out is unknown',
   recentRateNone: 'Recent success rate: -',
   recentRate: (percent, ok, total) => `Recent success rate: ${percent}% (${ok}/${total})`,
 

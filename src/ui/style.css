@@ -148,3 +148,4 @@ textarea { display: block; box-sizing: border-box; width: 100%; margin: 8px 0; b
   /* ページ全体がスクロールするので、計測の小窓のための余白は役に立たない */
   .frame-meter-panel .fm-legend, .frame-meter-panel .fm-note { padding-right: 0; }
 }
+.status-panel .outcome { font-size: 14px; color: #cfd3da; margin: 0 0 8px; }

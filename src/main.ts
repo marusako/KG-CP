@@ -25,6 +25,7 @@ import { detectPadFamily } from './input/padLayout';
 import { findCharacter, moveToCommand, type CharacterData } from './core/characters';
 import { INITIAL_FIGHTER, moveDisplayName, stepFighter, type FighterState } from './core/fighter';
 import { contactReaction, fighterDataFor, type DummyMode, type FighterData } from './core/frameData';
+import { IDLE_OUTCOME, moveMatchesCommand, stepMoveOutcome, type OutcomeState } from './core/moveOutcome';
 import { INITIAL_DUMMY, stepDummy, type DummyState } from './core/dummy';
 import type { SimFrame } from './core/comboSim';
 import { EMPTY_FRAME_METER, stepFrameMeter, stopFrameMeter, syncMoveTexts, type FrameMeterState } from './core/frameMeter';
@@ -120,6 +121,40 @@ let moveTexts: readonly string[] = [];
 /** moveTexts に当たり方の結果を足して、つないだ、帯の下の 1 行目 */
 let movesLine = '';
 
+/** コマンド練習の出た技の追いかけ。command は、待っている試しで選んでいた技 */
+let outcome: { state: OutcomeState; command: CommandDef | null } = { state: IDLE_OUTCOME, command: null };
+
+/** 出た技を 1 フレーム進め、試しがあれば行を書き換える（技の途中に押したときは待つ文、決まったらその文） */
+function stepOutcome(before: FighterState, after: FighterState, attempt: boolean): void {
+  if (fighter === null) return;
+  const command = panel.selected();
+  // 選んだ技にデータがないときは、試しのたびに「分からない」を出し、追いかけない
+  if (attempt && !fighter.data.moves.some((m) => moveMatchesCommand(m, command, profile))) {
+    outcome = { state: IDLE_OUTCOME, command: null };
+    panel.showOutcome(msg().outcomeNoData);
+    return;
+  }
+  const attemptCommand = attempt ? command : outcome.command;
+  const r = stepMoveOutcome(outcome.state, before, after, attempt);
+  outcome = { state: r.state, command: attemptCommand };
+  // 技を選び直したあとに決まった前の試しは、出さない
+  if (attemptCommand !== command) return;
+  const o = r.outcome;
+  if (o === null) {
+    if (attempt && r.state.kind === 'pending') panel.showOutcome(msg().outcomePending);
+    return;
+  }
+  panel.showOutcome(
+    o.kind === 'move'
+      ? msg().outcomeMove(
+          moveDisplayName(o.move, fighter.character, profile, getLang()),
+          o.via,
+          !moveMatchesCommand(o.move, command, profile),
+        )
+      : msg().outcomeNone(o.reason),
+  );
+}
+
 /** キャラ・相手の状態と帯を最初に戻す（キャラやゲーム・相手の切り替え、練習画面に入ったとき） */
 function resetFighter(): void {
   fighterState = INITIAL_FIGHTER;
@@ -127,6 +162,7 @@ function resetFighter(): void {
   frameMeter = EMPTY_FRAME_METER;
   moveTexts = [];
   movesLine = '';
+  outcome = { state: IDLE_OUTCOME, command: null };
 }
 
 /** キャラの技を、コマンド練習の一覧（読めないものは除く）と注記にする */
@@ -484,6 +520,9 @@ function stepFrame(end: number): void {
   history.push({ dir, buttons });
   if (history.length > MAX_FRAMES) history.shift();
 
+  // コマンド練習の判定は、キャラの動きより先に求める（結果があったフレームを、出た技の追いかけに渡すため）
+  const attemptResult = activeTab === 'combo' ? null : analyzeAttempt(history, panel.selected());
+
   // 練習画面の外では、キャラも帯も進めない（入ると最初に戻すので、外の入力は残らない）
   let sim: SimFrame | null = null;
   if (screens.current() === 'game') {
@@ -497,13 +536,13 @@ function stepFrame(end: number): void {
     const prevMeter = frameMeter;
     frameMeter = stepFrameMeter(prevMeter, before, fighterState, history, { dummy: dummyState, contact: hit.contact });
     if (frameMeter !== prevMeter) updateMoveTexts(prevMeter);
+    if (activeTab !== 'combo' && fighter !== null) stepOutcome(before, hit.fighter, attemptResult !== null);
   }
   // コンボトライアルは、キャラと相手の動きが決まったあとに判定する（相手に当たってつながったかを見るため）
   if (activeTab === 'combo') {
     comboPanel.step(history, frame, sim);
   } else {
-    const result = analyzeAttempt(history, panel.selected());
-    if (result) panel.showResult(result);
+    if (attemptResult) panel.showResult(attemptResult);
   }
   frame++;
   renderHistory(compressHistory(history, HISTORY_ROWS));

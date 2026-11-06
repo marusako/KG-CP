@@ -65,6 +65,9 @@ const SPECIAL_ARGS: Readonly<Record<string, readonly unknown[]>> = {
   contactText: [{ kind: 'hit', knockdown: false, combo: false, advantage: 5 }],
   // 第15段階: マイナス（先行入力）の枝も、日英のキーの確認・日本語の確認にかける
   comboTiming: [-3, 13],
+  // 第16段階: 出た技の文（技名・via・違うか／理由）
+  outcomeMove: ['Crouching MK (2MK)', 'buffer', true],
+  outcomeNone: ['bufferLost'],
 };
 
 /** 関数は代表の引数（数）で呼んで文字列にする。入れ子のオブジェクトは辿る */
@@ -431,5 +434,50 @@ describe('第15段階の文（コンボトライアルの新しい判定）', ()
     expect(m().comboWindowFallback).toBe('This recipe has steps the frame data cannot judge, so it is judged by input timing windows');
     expect(m().comboCharacterNote).toBe('With a character selected, steps are judged by whether they hit and combo (the opponent is fixed to Hit)');
     expect(m().dummyLockedCombo).toBe('Fixed to Hit during combo trials');
+  });
+});
+
+describe('第16段階の文（コマンド練習の出た技）', () => {
+  const m = () => msg();
+  const NAME = 'しゃがみ中K (2MK)';
+
+  it('outcomeMove 日本語: 出た技: 名前 に、先行入力・キャンセル・選んだ技と違う を足す', () => {
+    setLang('ja');
+    expect(m().outcomeMove(NAME, 'direct', false)).toBe(`出た技: ${NAME}`);
+    expect(m().outcomeMove(NAME, 'buffer', false)).toBe(`出た技: ${NAME}（先行入力）`);
+    expect(m().outcomeMove(NAME, 'cancel', false)).toBe(`出た技: ${NAME}（キャンセル）`);
+    expect(m().outcomeMove(NAME, 'direct', true)).toBe(`出た技: ${NAME}（選んだ技と違う）`);
+    expect(m().outcomeMove(NAME, 'buffer', true)).toBe(`出た技: ${NAME}（先行入力）（選んだ技と違う）`);
+  });
+
+  it('outcomeMove 英語', () => {
+    setLang('en');
+    expect(m().outcomeMove('Crouching MK (2MK)', 'direct', false)).toBe('Came out: Crouching MK (2MK)');
+    expect(m().outcomeMove('Crouching MK (2MK)', 'buffer', false)).toBe('Came out: Crouching MK (2MK) (buffered)');
+    expect(m().outcomeMove('Crouching MK (2MK)', 'cancel', false)).toBe('Came out: Crouching MK (2MK) (cancel)');
+    expect(m().outcomeMove('Crouching MK (2MK)', 'direct', true)).toBe('Came out: Crouching MK (2MK) (not the selected move)');
+    expect(m().outcomeMove('Crouching MK (2MK)', 'cancel', true)).toBe(
+      'Came out: Crouching MK (2MK) (cancel) (not the selected move)',
+    );
+  });
+
+  it('outcomeNone 日本語・英語', () => {
+    setLang('ja');
+    expect(m().outcomeNone('noMove')).toBe('技は出ませんでした');
+    expect(m().outcomeNone('air')).toBe('技は出ませんでした（空中では出せません）');
+    expect(m().outcomeNone('bufferLost')).toBe('技は出ませんでした（先行入力が切れた）');
+    setLang('en');
+    expect(m().outcomeNone('noMove')).toBe('No move came out');
+    expect(m().outcomeNone('air')).toBe('No move came out (cannot be used in the air)');
+    expect(m().outcomeNone('bufferLost')).toBe('No move came out (the input buffer expired)');
+  });
+
+  it('outcomePending・outcomeNoData（ja・en）', () => {
+    setLang('ja');
+    expect(m().outcomePending).toBe('出た技: 待っています（技の途中に押したので、動けるようになったら出ます）');
+    expect(m().outcomeNoData).toBe('この技はフレームデータがないので、出る技は分かりません');
+    setLang('en');
+    expect(m().outcomePending).toBe('Came out: waiting (pressed during a move; it comes out when you can act)');
+    expect(m().outcomeNoData).toBe('This move has no frame data, so the move that comes out is unknown');
   });
 });
