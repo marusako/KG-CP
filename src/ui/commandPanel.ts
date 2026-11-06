@@ -1,7 +1,8 @@
 import { msg } from '../i18n/messages';
 import { createSearchInput } from './searchInput';
 import { filterItems } from '../core/search';
-import type { AttemptResult, CommandDef } from '../core/types';
+import type { FollowUpJudge } from '../core/followUp';
+import type { AttemptResult, PracticeDef } from '../core/types';
 import type { PanelRoots } from './panelRoots';
 
 const RECENT_ATTEMPTS = 20;
@@ -26,24 +27,44 @@ export function describeResult(r: AttemptResult): string {
   }
 }
 
+/** 派生の項目の判定の文 */
+export function describeFollowUp(j: FollowUpJudge): string {
+  const m = msg();
+  if (j.ok) return m.followUpOk;
+  switch (j.reason) {
+    case 'noParent':
+      return m.followUpNoParent;
+    case 'noContact':
+      return m.followUpNoContact;
+    case 'other':
+      return m.followUpOther;
+    case 'early':
+      return m.followUpEarly(j.frames);
+    case 'late':
+      return m.followUpLate(j.frames);
+  }
+}
+
 /** 検索欄で照らし合わせる文字列。表示名・表記と、検索用の別名（キャラの技の英語名と日本語名） */
-export function commandSearchTexts(c: CommandDef): string[] {
+export function commandSearchTexts(c: PracticeDef): string[] {
   return [c.name, c.notation, ...(c.searchNames ?? [])];
 }
 
 export interface CommandPanel {
-  readonly selected: () => CommandDef;
+  readonly selected: () => PracticeDef;
   readonly showResult: (r: AttemptResult) => void;
+  /** 派生の項目の判定を出す（成功率にも数える） */
+  readonly showFollowUp: (j: FollowUpJudge) => void;
   /** 判定の文の下に、出た技の文を 1 行で出す（null で消す） */
   readonly showOutcome: (text: string | null) => void;
   /** 一覧を入れ替え、先頭を選ぶ（成功率も数え直し、検索欄は空に戻す）。notes は技の id → 注記 */
-  readonly setCommands: (commands: readonly CommandDef[], notes?: ReadonlyMap<string, string>) => void;
+  readonly setCommands: (commands: readonly PracticeDef[], notes?: ReadonlyMap<string, string>) => void;
 }
 
 /** 選ぶ一覧（検索欄と技の一覧）を roots.select に、判定の結果（選んでいる技の名前・注記・判定の文・成功率）を roots.status に置く */
 export function createCommandPanel(
   roots: PanelRoots,
-  commands: readonly CommandDef[],
+  commands: readonly PracticeDef[],
   initialNotes: ReadonlyMap<string, string> = new Map(),
 ): CommandPanel {
   const section = document.createElement('section');
@@ -74,7 +95,7 @@ export function createCommandPanel(
 
   let all = commands;
   let notes = initialNotes;
-  let current = commands[0] as CommandDef;
+  let current = commands[0] as PracticeDef;
   let recent: boolean[] = [];
 
   const updateRate = () => {
@@ -89,6 +110,15 @@ export function createCommandPanel(
   const updateNote = () => {
     currentName.textContent = current.name;
     moveNote.textContent = notes.get(current.id) ?? '';
+  };
+
+  /** 判定の文を出し、成功率に数える */
+  const record = (ok: boolean, text: string) => {
+    result.className = `result ${ok ? 'ok' : 'ng'}`;
+    result.textContent = text;
+    recent.push(ok);
+    if (recent.length > RECENT_ATTEMPTS) recent.shift();
+    updateRate();
   };
 
   const showOutcome = (text: string | null) => {
@@ -140,19 +170,14 @@ export function createCommandPanel(
     setCommands: (next, nextNotes = new Map()) => {
       all = next;
       notes = nextNotes;
-      current = next[0] as CommandDef;
+      current = next[0] as PracticeDef;
       search.value = '';
       updateNote();
       renderList();
       resetView();
     },
     showOutcome,
-    showResult: (r) => {
-      result.className = `result ${r.ok ? 'ok' : 'ng'}`;
-      result.textContent = describeResult(r);
-      recent.push(r.ok);
-      if (recent.length > RECENT_ATTEMPTS) recent.shift();
-      updateRate();
-    },
+    showResult: (r) => record(r.ok, describeResult(r)),
+    showFollowUp: (j) => record(j.ok, describeFollowUp(j)),
   };
 }

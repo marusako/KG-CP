@@ -1,13 +1,17 @@
 import { msg } from '../i18n/messages';
 import { analyzeAttempt, justPressedAny } from './detect';
-import { parseStep } from './notation';
+import { followInputMatches, parseStep } from './notation';
 import type { NotationRules, StepInput } from './notation';
 import type { FrameInput } from './types';
 
 export type { StepInput } from './notation';
 
-/** いまのフレーム（history の最後）で step の入力が成立したか */
+/**
+ * いまのフレーム（history の最後）で step の入力が成立したか。
+ * 派生は、派生のボタンが押された瞬間に成立（親の入力は見ない。親の技が出ているかは、キャラの動きで見る新しい判定のほうで決める）
+ */
 export function matchesStep(history: readonly FrameInput[], input: StepInput): boolean {
+  if (input.kind === 'followUp') return followInputMatches(history, input.follow);
   if (input.kind === 'command') {
     return analyzeAttempt(history, { ...input.command, buttons: input.buttons })?.ok === true;
   }

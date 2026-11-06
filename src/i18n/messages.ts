@@ -112,6 +112,13 @@ const ja = {
     `技は出ませんでした${reason === 'air' ? '（空中では出せません）' : reason === 'bufferLost' ? '（先行入力が切れた）' : ''}`,
   outcomePending: '出た技: 待っています（技の途中に押したので、動けるようになったら出ます）',
   outcomeNoData: 'この技はフレームデータがないので、出る技は分かりません',
+  // 派生の項目（コマンド練習）
+  followUpOk: '成立！ 派生が出ました',
+  followUpNoParent: '親の技が出ていません',
+  followUpEarly: (n: number) => `早い（あと ${n}F 遅く）`,
+  followUpLate: (n: number) => `遅い（${n}F 遅い）`,
+  followUpNoContact: '親の技が当たっていません（当たったときだけ出せます）',
+  followUpOther: '別の技が出ました',
   recentRateNone: '直近の成功率: -',
   recentRate: (percent: number, ok: number, total: number) => `直近の成功率: ${percent}%（${ok}/${total}）`,
 
@@ -317,6 +324,12 @@ const en: Messages = {
     `No move came out${reason === 'air' ? ' (cannot be used in the air)' : reason === 'bufferLost' ? ' (the input buffer expired)' : ''}`,
   outcomePending: 'Came out: waiting (pressed during a move; it comes out when you can act)',
   outcomeNoData: 'This move has no frame data, so the move that comes out is unknown',
+  followUpOk: 'Success! The follow-up came out',
+  followUpNoParent: 'The base move is not out',
+  followUpEarly: (n) => `Too early (${n}F later)`,
+  followUpLate: (n) => `Too late (${n}F late)`,
+  followUpNoContact: 'The base move did not hit (only usable on contact)',
+  followUpOther: 'A different move came out',
   recentRateNone: 'Recent success rate: -',
   recentRate: (percent, ok, total) => `Recent success rate: ${percent}% (${ok}/${total})`,
 

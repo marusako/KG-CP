@@ -481,3 +481,29 @@ describe('第16段階の文（コマンド練習の出た技）', () => {
     expect(m().outcomeNoData).toBe('This move has no frame data, so the move that comes out is unknown');
   });
 });
+
+describe('第17段階の文（コマンド練習の派生の失敗）', () => {
+  const m = () => msg();
+
+  it('日本語: 親なし・早い（あと n フレーム遅く）・遅い（n フレーム遅い）・当たっていない', () => {
+    setLang('ja');
+    expect(m().followUpNoParent).toBe('親の技が出ていません');
+    expect(m().followUpEarly(3)).toBe('早い（あと 3F 遅く）');
+    expect(m().followUpLate(5)).toBe('遅い（5F 遅い）');
+    expect(m().followUpNoContact).toBe('親の技が当たっていません（当たったときだけ出せます）');
+    expect(m().followUpOther).toBe('別の技が出ました');
+  });
+
+  it('英語（日本語の文字を含まない）', () => {
+    setLang('en');
+    expect(m().followUpNoParent).toBe('The base move is not out');
+    expect(m().followUpEarly(3)).toBe('Too early (3F later)');
+    expect(m().followUpLate(5)).toBe('Too late (5F late)');
+    expect(m().followUpNoContact).toBe('The base move did not hit (only usable on contact)');
+    expect(m().followUpOther).toBe('A different move came out');
+    expect(m().followUpOther).not.toMatch(JAPANESE);
+    for (const t of [m().followUpNoParent, m().followUpEarly(3), m().followUpLate(5), m().followUpNoContact]) {
+      expect(t).not.toMatch(JAPANESE);
+    }
+  });
+});

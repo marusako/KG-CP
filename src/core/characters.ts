@@ -6,12 +6,13 @@ import type { ComboRecipe } from './combo';
 import { parseStep } from './notation';
 import type { NotationRules } from './notation';
 import type { PlayableGameId } from './profiles';
-import type { CommandDef } from './types';
+import type { CommandDef, FollowUpDef, PracticeDef } from './types';
 
 // データはアプリの中に入れる。wiki をその場で読みに行かない（CORS と、サイト側のアクセス拒否のため）。
 // キャラの絵や公式のアイコンは使わない（著作物のため）。確認日: 2026-11-05。
 
-export type MoveKind = 'special' | 'super';
+/** 'followUp' は派生の技（入力は 親~派生 か 親>派生）。コマンド練習の一覧に、派生の項目として出る */
+export type MoveKind = 'special' | 'super' | 'followUp';
 export interface MoveData {
   id: string;
   name: LocalizedText;
@@ -72,7 +73,7 @@ const CAMMY: CharacterData = {
       name: { en: 'Hooligan Combination', ja: 'フーリガンコンビネーション' },
       inputs: ['236P'],
       kind: 'special',
-      note: { ja: '派生（K など）は練習の対象外です', en: 'Follow-ups (such as K) are not part of the practice' },
+      note: { ja: '派生（K・2K・LP+LK・P）は、別の項目で練習します', en: 'Practice the follow-ups (K, 2K, LP+LK, P) as separate items' },
     },
     { id: 'cammy-sa1', name: { en: 'Spin Drive Smasher', ja: 'スピンドライブスマッシャー' }, inputs: ['236236K'], kind: 'super' },
     {
@@ -83,6 +84,12 @@ const CAMMY: CharacterData = {
       note: { ja: 'Season 2 で K から P に変わりました', en: 'Changed from K to P in Season 2' },
     },
     { id: 'cammy-sa3', name: { en: 'Delta Red Assault', ja: 'デルタレッドアサルト' }, inputs: ['236236P'], kind: 'super' },
+    // 派生の技。名前は FAT の英語名で、日本語名は付けない（出典を確かめられないため。日本語でも英語名が出る）
+    { id: 'cammy-swing-combination', name: { en: 'Swing Combination' }, inputs: ['5HP>HK'], kind: 'followUp' },
+    { id: 'cammy-hooligan-cannon-strike', name: { en: 'Cannon Strike (Hooligan)' }, inputs: ['236P>K'], kind: 'followUp' },
+    { id: 'cammy-hooligan-reverse-edge', name: { en: 'Reverse Edge' }, inputs: ['236P>2K'], kind: 'followUp' },
+    { id: 'cammy-hooligan-fatal-leg-twister', name: { en: 'Fatal Leg Twister' }, inputs: ['236P>LPLK'], kind: 'followUp' },
+    { id: 'cammy-hooligan-silent-step', name: { en: 'Silent Step' }, inputs: ['236P>P'], kind: 'followUp' },
   ],
   combos: [
     {
@@ -124,7 +131,6 @@ const BRIDGET: CharacterData = {
       name: { en: 'Kick Start My Heart', ja: 'キックスタート マイ ハート' },
       inputs: ['236K'],
       kind: 'special',
-      note: { ja: '派生の 発射（K）・停止（P）は練習の対象外です', en: 'The follow-ups Shoot (K) and Brake (P) are not part of the practice' },
     },
     {
       id: 'bridget-roger-dive',
@@ -167,6 +173,9 @@ const BRIDGET: CharacterData = {
       inputs: ['632146HS'],
       kind: 'super',
     },
+    // 派生の技（停止・発射）。日本語名は確かめられる出典がないので付けない
+    { id: 'bridget-ksmh-brake', name: { en: 'Brake' }, inputs: ['236K~P'], kind: 'followUp' },
+    { id: 'bridget-ksmh-shoot', name: { en: 'Shoot' }, inputs: ['236K~K'], kind: 'followUp' },
   ],
   combos: [
     {
@@ -198,7 +207,7 @@ export function findCharacter(game: PlayableGameId, id: unknown): CharacterData 
 
 /**
  * 技を練習用の CommandDef にする。id は技のもの、name は「名前 (入力)」（入力が複数なら「・」でつなぐ。名前は lang の言語。日本語名がなければ英語名）。
- * 方向と猶予は表記から読んだコマンドと同じで、buttons は inputs のボタンを合わせたもの。読めなければ null
+ * 方向と猶予は表記から読んだコマンドと同じで、buttons は inputs のボタンを合わせたもの。読めなければ null（派生の技 kind 'followUp' も null。派生は moveToFollowUp）
  */
 export function moveToCommand(move: MoveData, rules: NotationRules, lang: Lang = getLang()): CommandDef | null {
   let base: CommandDef | null = null;
@@ -216,6 +225,21 @@ export function moveToCommand(move: MoveData, rules: NotationRules, lang: Lang =
   const searchNames = move.name.ja === undefined ? [move.name.en] : [move.name.en, move.name.ja];
   const name = `${pick(move.name, lang)} (${move.inputs.join(msg(lang).inputSep)})`;
   return { ...base, id: move.id, name, buttons, searchNames };
+}
+
+/** 派生の技（kind 'followUp'）を、コマンド練習の派生の項目にする。名前は moveToCommand と同じ決め。派生の技でなければ、読めなければ null */
+export function moveToFollowUp(move: MoveData, rules: NotationRules, lang: Lang = getLang()): FollowUpDef | null {
+  const first = move.kind === 'followUp' ? move.inputs[0] : undefined;
+  const r = first === undefined ? null : parseStep(first, rules);
+  if (r === null || !r.ok || r.input.kind !== 'followUp') return null;
+  const searchNames = move.name.ja === undefined ? [move.name.en] : [move.name.en, move.name.ja];
+  const name = `${pick(move.name, lang)} (${move.inputs.join(msg(lang).inputSep)})`;
+  return { kind: 'followUp', id: move.id, name, notation: r.input.text, buttons: r.input.follow.buttons, searchNames };
+}
+
+/** コマンド練習の一覧の項目にする（派生の技は moveToFollowUp、そのほかは moveToCommand）。読めなければ null */
+export function moveToPractice(move: MoveData, rules: NotationRules, lang: Lang = getLang()): PracticeDef | null {
+  return move.kind === 'followUp' ? moveToFollowUp(move, rules, lang) : moveToCommand(move, rules, lang);
 }
 
 /** コンボを ComboRecipe にする。窓は LOOSE_WINDOWS。読めなければ null */

@@ -5,7 +5,7 @@ import { pick } from './i18n/localized';
 import { analyzeAttempt } from './core/detect';
 import { compressHistory, historyAfterStall } from './core/history';
 import { createFrameClock, dueFrames, type FrameClock } from './core/clock';
-import type { CommandDef, FrameInput } from './core/types';
+import type { FrameInput, PracticeDef } from './core/types';
 import { dropDisconnected, nextActiveDevice, type Device } from './input/activeDevice';
 import {
   INITIAL_GATE,
@@ -22,11 +22,12 @@ import { resolveDirection } from './input/direction';
 import { readGamepads, type PadInfo, type PadState } from './input/gamepad';
 import { KeyboardReader } from './input/keyboard';
 import { detectPadFamily } from './input/padLayout';
-import { findCharacter, moveToCommand, type CharacterData } from './core/characters';
+import { findCharacter, moveToPractice, type CharacterData } from './core/characters';
 import { INITIAL_FIGHTER, moveDisplayName, stepFighter, type FighterState } from './core/fighter';
 import { contactReaction, fighterDataFor, type DummyMode, type FighterData } from './core/frameData';
 import { IDLE_OUTCOME, moveMatchesCommand, stepMoveOutcome, type OutcomeState } from './core/moveOutcome';
 import { INITIAL_DUMMY, stepDummy, type DummyState } from './core/dummy';
+import { judgePracticeFollowUp, type FollowUpJudge } from './core/followUp';
 import type { SimFrame } from './core/comboSim';
 import { EMPTY_FRAME_METER, stepFrameMeter, stopFrameMeter, syncMoveTexts, type FrameMeterState } from './core/frameMeter';
 import { PROFILES, profileFor, type GameProfile, type PlayableGameId } from './core/profiles';
@@ -122,14 +123,14 @@ let moveTexts: readonly string[] = [];
 let movesLine = '';
 
 /** コマンド練習の出た技の追いかけ。command は、待っている試しで選んでいた技 */
-let outcome: { state: OutcomeState; command: CommandDef | null } = { state: IDLE_OUTCOME, command: null };
+let outcome: { state: OutcomeState; command: PracticeDef | null } = { state: IDLE_OUTCOME, command: null };
 
 /** 出た技を 1 フレーム進め、試しがあれば行を書き換える（技の途中に押したときは待つ文、決まったらその文） */
 function stepOutcome(before: FighterState, after: FighterState, attempt: boolean): void {
   if (fighter === null) return;
   const command = panel.selected();
-  // 選んだ技にデータがないときは、試しのたびに「分からない」を出し、追いかけない
-  if (attempt && !fighter.data.moves.some((m) => moveMatchesCommand(m, command, profile))) {
+  // 選んだ技にデータがないときは、試しのたびに「分からない」を出し、追いかけない（派生の項目は、派生の技が必ずデータにある）
+  if (attempt && command.kind !== 'followUp' && !fighter.data.moves.some((m) => moveMatchesCommand(m, command, profile))) {
     outcome = { state: IDLE_OUTCOME, command: null };
     panel.showOutcome(msg().outcomeNoData);
     return;
@@ -166,9 +167,9 @@ function resetFighter(): void {
 }
 
 /** キャラの技を、コマンド練習の一覧（読めないものは除く）と注記にする */
-function practiceOf(p: GameProfile, c: CharacterData | null): { commands: CommandDef[]; notes: Map<string, string> } {
+function practiceOf(p: GameProfile, c: CharacterData | null): { commands: PracticeDef[]; notes: Map<string, string> } {
   if (c === null) return { commands: [...p.practiceCommands], notes: new Map() };
-  const commands = c.moves.flatMap((m) => moveToCommand(m, p) ?? []);
+  const commands = c.moves.flatMap((m) => moveToPractice(m, p) ?? []);
   const notes = new Map(c.moves.flatMap((m) => (m.note === undefined ? [] : [[m.id, pick(m.note, getLang())] as const])));
   return { commands, notes };
 }
@@ -521,7 +522,10 @@ function stepFrame(end: number): void {
   if (history.length > MAX_FRAMES) history.shift();
 
   // コマンド練習の判定は、キャラの動きより先に求める（結果があったフレームを、出た技の追いかけに渡すため）
-  const attemptResult = activeTab === 'combo' ? null : analyzeAttempt(history, panel.selected());
+  // 派生の項目（kind 'followUp'）は analyzeAttempt が null を返す。キャラの動きが決まったあとに、judgePracticeFollowUp で判定する
+  const practiceSelected = panel.selected();
+  const attemptResult = activeTab === 'combo' || practiceSelected.kind === 'followUp' ? null : analyzeAttempt(history, practiceSelected);
+  let followUpJudge: FollowUpJudge | null = null;
 
   // 練習画面の外では、キャラも帯も進めない（入ると最初に戻すので、外の入力は残らない）
   let sim: SimFrame | null = null;
@@ -536,13 +540,26 @@ function stepFrame(end: number): void {
     const prevMeter = frameMeter;
     frameMeter = stepFrameMeter(prevMeter, before, fighterState, history, { dummy: dummyState, contact: hit.contact });
     if (frameMeter !== prevMeter) updateMoveTexts(prevMeter);
-    if (activeTab !== 'combo' && fighter !== null) stepOutcome(before, hit.fighter, attemptResult !== null);
+    if (activeTab !== 'combo' && fighter !== null && practiceSelected.kind === 'followUp') {
+      followUpJudge = judgePracticeFollowUp(practiceSelected, fighter.data, profile, history, before, hit.fighter);
+    }
+    if (activeTab !== 'combo' && fighter !== null) {
+      const cameOut = hit.fighter.cancelTo ?? hit.fighter.move;
+      if (followUpJudge?.ok === true && cameOut !== null) {
+        // 派生が出た（ヒットストップ中の予約を含む）。同じフレームの先行入力の待ちなどは出さない
+        outcome = { state: IDLE_OUTCOME, command: null };
+        panel.showOutcome(msg().outcomeMove(moveDisplayName(cameOut, fighter.character, profile, getLang()), 'direct', false));
+      } else {
+        stepOutcome(before, hit.fighter, attemptResult !== null || followUpJudge !== null);
+      }
+    }
   }
   // コンボトライアルは、キャラと相手の動きが決まったあとに判定する（相手に当たってつながったかを見るため）
   if (activeTab === 'combo') {
     comboPanel.step(history, frame, sim);
   } else {
     if (attemptResult) panel.showResult(attemptResult);
+    else if (followUpJudge) panel.showFollowUp(followUpJudge);
   }
   frame++;
   renderHistory(compressHistory(history, HISTORY_ROWS));

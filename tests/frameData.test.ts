@@ -21,6 +21,10 @@ const CAMMY: Row[] = [
   ['236LK', 8, 13, 21, 42],
   ['236MK', 8, 15, 21, 44],
   ['236HK', 14, 16, 21, 51],
+  // 第17段階: フーリガン（派生なしで自動で出るレイザーエッジスライサーの数字。発生 50）
+  ['236LP', 49, 9, 13, 71],
+  ['236MP', 49, 9, 13, 71],
+  ['236HP', 49, 9, 13, 71],
   ['623LK', 4, 12, 40, 56],
   ['623MK', 5, 12, 41, 58],
   ['623HK', 6, 12, 44, 62],
@@ -133,6 +137,9 @@ const CAMMY_REACTIONS: ReactionRow[] = [
   ['236LK', null, null],
   ['236MK', null, null],
   ['236HK', null, null],
+  ['236LP', ['down', 70, 48], ['blockstun', 24, 2]], // 48+9+13 / 2+9+13（レイザーエッジスライサー）
+  ['236MP', ['down', 70, 48], ['blockstun', 24, 2]],
+  ['236HP', ['down', 70, 48], ['blockstun', 24, 2]],
   ['623LK', ['down', 72, 20], ['blockstun', 16, -36]], // 20+12+40 / -36+12+40
   ['623MK', ['down', 74, 21], ['blockstun', 17, -36]], // 21+12+41 / -36+12+41（ガードの L は FAT の硬直 16 と合わない技）
   ['623HK', ['down', 78, 22], ['blockstun', 20, -36]], // 22+12+44 / -36+12+44（同上）
@@ -250,7 +257,8 @@ describe('contactReaction (第13段階 受け入れ条件 1)', () => {
 // ---- 第14段階 受け入れ条件 1: hitstop・cancels ----
 
 const CAMMY_CHAIN = ['5LP', '2LP', '2LK'];
-const CAMMY_SPECIAL = ['236LK', '236MK', '236HK', '623LK', '623MK', '623HK', '214LP', '214MP', '214HP'];
+// 第17段階: フーリガン（236LP・236MP・236HP）も必殺技として、キャンセル先に入る
+const CAMMY_SPECIAL = ['236LK', '236MK', '236HK', '623LK', '623MK', '623HK', '214LP', '214MP', '214HP', '236LP', '236MP', '236HP'];
 const CAMMY_SA = ['236236K', '214214P', '236236P'];
 const BRIDGET_SPECIAL = ['236K', '236S', '236HS', '623P', '63214P'];
 const BRIDGET_SA = ['632146S'];
@@ -261,7 +269,7 @@ type CancelRow = [string, number | null, readonly string[] | null];
 const CAMMY_CANCELS: CancelRow[] = [
   ['5LP', 9, [...CAMMY_CHAIN, ...CAMMY_SPECIAL, ...CAMMY_SA]],
   ['5MP', 11, null],
-  ['5HP', 13, [...CAMMY_SPECIAL, ...CAMMY_SA]], // tc（ターゲットコンボ）は対象外
+  ['5HP', 13, [...CAMMY_SPECIAL, ...CAMMY_SA]], // tc（ターゲットコンボ）は cancels でなく followUps（第17段階。tests/followUp.test.ts）
   ['5LK', 9, [...CAMMY_SPECIAL, ...CAMMY_SA]],
   ['5MK', 11, null],
   ['5HK', 13, null],
@@ -274,6 +282,9 @@ const CAMMY_CANCELS: CancelRow[] = [
   ['236LK', null, null], // 反応のデータがなく当たらない
   ['236MK', null, null],
   ['236HK', null, ['236236P']], // 当たらないので、今は出せない
+  ['236LP', 13, ['236236P']], // 第17段階: レイザーエッジスライサー（FAT の su3）
+  ['236MP', 13, ['236236P']],
+  ['236HP', 13, ['236236P']],
   ['623LK', 12, ['236236P']], // FAT は 12(13)。括弧の外
   ['623MK', 12, ['236236P']],
   ['623HK', 12, ['236236P']],

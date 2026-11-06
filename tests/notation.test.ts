@@ -202,3 +202,80 @@ describe('parseStep: GG のルール (受け入れ条件 1)', () => {
     }
   });
 });
+
+// ---- 第17段階 受け入れ条件 7: 親~派生・親>派生 ----
+
+describe('parseStep: 派生 (第17段階 受け入れ条件 7)', () => {
+  const parse = (text: string, rules = PROFILES.sf6) => parseStep(text, rules);
+
+  it('236K~P（GG）は followUp。親は 236K のコマンド、派生は P（方向なし）', () => {
+    const r = parse('236K~P', PROFILES.ggst);
+    if (!r.ok) throw new Error(r.error);
+    expect(r.input.kind).toBe('followUp');
+    if (r.input.kind !== 'followUp') return;
+    expect(r.input.text).toBe('236K~P');
+    expect(r.input.parent.kind).toBe('command');
+    expect(r.input.follow.dirs).toBeNull();
+    expect(r.input.follow.buttons).toEqual(['P']);
+  });
+
+  it('5HP>HK は followUp。親は通常技 5HP、派生は HK（方向なし）', () => {
+    const r = parse('5HP>HK');
+    if (!r.ok) throw new Error(r.error);
+    expect(r.input.kind).toBe('followUp');
+    if (r.input.kind !== 'followUp') return;
+    expect(r.input.parent).toEqual({ kind: 'normal', dirs: [5], buttons: ['HP'] });
+    expect(r.input.follow.dirs).toBeNull();
+    expect(r.input.follow.buttons).toEqual(['HK']);
+  });
+
+  it('236P>LPLK は followUp。派生は LP と LK の同時押し', () => {
+    const r = parse('236P>LPLK');
+    if (!r.ok) throw new Error(r.error);
+    expect(r.input.kind).toBe('followUp');
+    if (r.input.kind !== 'followUp') return;
+    expect(r.input.parent.kind).toBe('command');
+    expect(sorted(r.input.follow.buttons)).toEqual(['LK', 'LP']);
+  });
+
+  it('236LP>2K: 派生に方向がつく（2 は、しゃがみの 1・2・3）', () => {
+    const r = parse('236LP>2K');
+    if (!r.ok) throw new Error(r.error);
+    if (r.input.kind !== 'followUp') throw new Error('followUp ではありません');
+    expect(sorted(r.input.follow.dirs ?? [])).toEqual([1, 2, 3]);
+    expect(r.input.follow.buttons).toEqual(['LK', 'MK', 'HK']);
+  });
+
+  it('区切りは ~ と > のどちらでもよく、読んだ親と派生は同じ', () => {
+    for (const [a, c, rules] of [
+      ['236K~P', '236K>P', PROFILES.ggst],
+      ['5HP>HK', '5HP~HK', PROFILES.sf6],
+    ] as const) {
+      const x = parse(a, rules);
+      const y = parse(c, rules);
+      if (!x.ok || !y.ok) throw new Error('読めませんでした');
+      if (x.input.kind !== 'followUp' || y.input.kind !== 'followUp') throw new Error('followUp ではありません');
+      expect(y.input.parent).toEqual(x.input.parent);
+      expect(y.input.follow).toEqual(x.input.follow);
+    }
+  });
+
+  it('壊れた表記は失敗（236K~・~P・236K~~P・5HP>・>HK・派生が読めない 236K~Z）。エラー文は空でない', () => {
+    for (const [text, rules] of [
+      ['236K~', PROFILES.ggst],
+      ['~P', PROFILES.ggst],
+      ['236K~~P', PROFILES.ggst],
+      ['5HP>', PROFILES.sf6],
+      ['>HK', PROFILES.sf6],
+      ['236K~Z', PROFILES.ggst],
+    ] as const) {
+      const r = parse(text, rules);
+      expect(r.ok, text).toBe(false);
+      if (!r.ok) expect(r.error.trim(), text).not.toBe('');
+    }
+  });
+
+  it('派生を含まない今までの表記は変わらない（2LP は normal のまま）', () => {
+    expect(ok('2LP').kind).toBe('normal');
+  });
+});

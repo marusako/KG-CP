@@ -118,8 +118,8 @@ describe('selectMove (第10段階 受け入れ条件 3)', () => {
     it('ブリジットの 214 + K（データなし）も null', () => {
       expect(selectB(frames(2, 1, [4, ['K']]))).toBeNull();
     });
-    it('キャミィの 236 + LP（フーリガン、データなし）は null', () => {
-      expect(selectC(frames(2, 3, [6, ['LP']]))).toBeNull();
+    it('キャミィの 236 + LP（フーリガン）は、第17段階でデータができたので 236LP', () => {
+      expect(selectC(frames(2, 3, [6, ['LP']]))).toBe('236LP');
     });
     it('キャミィの 214 + K（キャノンストライク、データなし）は null', () => {
       expect(selectC(frames(2, 1, [4, ['LK']]))).toBeNull();

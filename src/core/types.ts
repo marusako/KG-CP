@@ -48,6 +48,23 @@ export type CommandDef = Searchable &
       motionWindow: number;
     });
 
+/**
+ * コマンド練習の派生の項目（親の技のあとに入れる入力。例: 236K~P）。
+ * 入力の履歴だけでは成否が決まらない（親の技が出ているかを見る）ので CommandDef には入れず、
+ * analyzeAttempt の対象ではない。キャラの動きで判定する（followUp.ts の judgePracticeFollowUp）
+ */
+export interface FollowUpDef extends Searchable {
+  kind: 'followUp';
+  id: string;
+  name: string;
+  /** 表記 例: '236K~P'、'236P>K' */
+  notation: string;
+  /** 派生のボタン（押した瞬間が試し） */
+  buttons: readonly string[];
+}
+
+/** コマンド練習の一覧の項目（コマンドか、派生） */
+export type PracticeDef = CommandDef | FollowUpDef;
 export type AttemptResult =
   | { ok: true; motionFrames: number; buttonDelay: number }
   | { ok: false; reason: 'incomplete'; matchedSteps: number; expected: readonly Direction[] }

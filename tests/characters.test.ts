@@ -42,6 +42,19 @@ function readCommand(c: CharacterData, text: string): CommandDef {
 }
 
 type MoveRow = [string, { en: string; ja?: string }, string[], 'special' | 'super'];
+// 第17段階: 派生の技（kind 'followUp'）。名前は FAT の英語名だけで、日本語名は付けない（出典を確かめられないため）
+type FollowUpRow = [string, { en: string }, string[]];
+const CAMMY_FOLLOW_UPS: FollowUpRow[] = [
+  ['cammy-swing-combination', { en: 'Swing Combination' }, ['5HP>HK']],
+  ['cammy-hooligan-cannon-strike', { en: 'Cannon Strike (Hooligan)' }, ['236P>K']],
+  ['cammy-hooligan-reverse-edge', { en: 'Reverse Edge' }, ['236P>2K']],
+  ['cammy-hooligan-fatal-leg-twister', { en: 'Fatal Leg Twister' }, ['236P>LPLK']],
+  ['cammy-hooligan-silent-step', { en: 'Silent Step' }, ['236P>P']],
+];
+const BRIDGET_FOLLOW_UPS: FollowUpRow[] = [
+  ['bridget-ksmh-brake', { en: 'Brake' }, ['236K~P']],
+  ['bridget-ksmh-shoot', { en: 'Shoot' }, ['236K~K']],
+];
 const CAMMY_MOVES: MoveRow[] = [
   ['cammy-spiral-arrow', { en: 'Spiral Arrow', ja: 'スパイラルアロー' }, ['236K'], 'special'],
   ['cammy-cannon-spike', { en: 'Cannon Spike', ja: 'キャノンスパイク' }, ['623K'], 'special'],
@@ -95,7 +108,13 @@ describe('CHARACTERS (第6段階 受け入れ条件 2)', () => {
     describe(cid, () => {
       it('技の id・名前(英語と日本語)・入力・種類が表のとおり(順も同じ)', () => {
         const c = character(cid);
-        expect(c.moves.map((m) => [m.id, m.name, [...m.inputs], m.kind])).toEqual(moves);
+        expect(c.moves.filter((m) => m.kind !== 'followUp').map((m) => [m.id, m.name, [...m.inputs], m.kind])).toEqual(moves);
+      });
+
+      it('派生の技（kind followUp）の id・英語名（日本語名なし）・入力が表のとおり', () => {
+        const c = character(cid);
+        const rows = cid === 'cammy' ? CAMMY_FOLLOW_UPS : BRIDGET_FOLLOW_UPS;
+        expect(c.moves.filter((m) => m.kind === 'followUp').map((m) => [m.id, m.name, [...m.inputs]])).toEqual(rows);
       });
 
       it('コンボの id・名前・手・つなぎ方が表のとおり', () => {
@@ -120,7 +139,7 @@ describe('CHARACTERS (第6段階 受け入れ条件 2)', () => {
 
       it('全部の技が、そのゲームのルールで null にならない', () => {
         const c = character(cid);
-        for (const m of c.moves) expect(moveToCommand(m, rulesOf(c)), m.id).not.toBeNull();
+        for (const m of c.moves.filter((x) => x.kind !== 'followUp')) expect(moveToCommand(m, rulesOf(c)), m.id).not.toBeNull();
       });
 
       it('全部のコンボが、そのゲームのルールで null にならない', () => {
@@ -144,11 +163,11 @@ describe('CHARACTERS (第6段階 受け入れ条件 2)', () => {
   });
 
   it('ブリジットの技名は全部 ja がある（wikiwiki で確かめた日本語名）', () => {
-    for (const m of character('bridget').moves) expect(m.name.ja, m.id).toBeTruthy();
+    for (const m of character('bridget').moves.filter((x) => x.kind !== 'followUp')) expect(m.name.ja, m.id).toBeTruthy();
   });
 
   it('キャミィの技名は全部 ja がある', () => {
-    for (const m of character('cammy').moves) expect(m.name.ja, m.id).toBeTruthy();
+    for (const m of character('cammy').moves.filter((x) => x.kind !== 'followUp')) expect(m.name.ja, m.id).toBeTruthy();
   });
 
   it('注記のある技は、ja と en の両方の注記がある', () => {
@@ -230,7 +249,7 @@ describe('moveToCommand (第6段階 受け入れ条件 3)', () => {
 
   it('全部の技で、方向と猶予が最初の入力から読んだコマンドと同じ', () => {
     for (const ch of CHARACTERS) {
-      for (const m of ch.moves) {
+      for (const m of ch.moves.filter((x) => x.kind !== 'followUp')) {
         const c = cmdOf(ch, m.id);
         expect(shapeOf(c), m.id).toEqual(shapeOf(readCommand(ch, m.inputs[0]!)));
       }
@@ -326,8 +345,16 @@ describe('キャラを足すときの守り（第6段階 レビューの提案 D
     expect(moveToCommand(mixed, PROFILES.ggst)).toBeNull();
   });
 
-  it('注記: Kick Start My Heart には派生の注記がある', () => {
-    expect(move(character('bridget'), 'bridget-kick-start').note).toBeTruthy();
+  it('注記: Kick Start My Heart の注記（派生は対象外）は、派生を入れた第17段階で消えた', () => {
+    expect(move(character('bridget'), 'bridget-kick-start').note).toBeUndefined();
+  });
+
+  it('各キャラに派生の技が 1 つ以上あり、入力には区切り（~ か >）がある', () => {
+    for (const c of CHARACTERS) {
+      const fu = c.moves.filter((m) => m.kind === 'followUp');
+      expect(fu.length, c.id).toBeGreaterThan(0);
+      for (const m of fu) expect(m.inputs.every((i) => /[~>]/.test(i)), m.id).toBe(true);
+    }
   });
 
   it('注記: プランの表で注記が空の技には note がない', () => {

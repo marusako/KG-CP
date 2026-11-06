@@ -3,9 +3,9 @@ import { pick } from '../i18n/localized';
 import { msg } from '../i18n/messages';
 import type { CharacterData } from './characters';
 import { analyzeAttempt } from './detect';
-import type { FighterData, MoveFrames } from './frameData';
+import type { FighterData, FollowUp, MoveFrames } from './frameData';
 import type { NotationRules } from './notation';
-import { parseStep } from './notation';
+import { followInputMatches, parseFollowInput, parseStep, stepInputMatches } from './notation';
 import type { CommandDef, FrameInput } from './types';
 
 /** 技の入力を読んだもの（コマンドは、技のボタンだけに絞ってある） */
@@ -124,10 +124,16 @@ export interface FighterState {
   hitstop?: number;
   /** このフレームはヒットストップで止まっていた（stepFighter が付ける。止まっていないフレームでは付けない） */
   frozen?: true;
-  /** ヒットストップ中に予約したキャンセル先の技。止まり終わった最初のフレームで出す */
+  /** ヒットストップ中に予約したキャンセル先（か派生）の技。止まり終わった最初のフレームで出す */
   cancelTo?: MoveFrames;
   /** いまの技はキャンセルで出した（新しい技を出す・動けるようになると消える） */
   canceled?: true;
+  /** cancelTo の予約は、派生を 1 つ前のフレーム（当たったフレーム）に押したもの（コンボトライアルの押したフレームを数える印） */
+  followFromPrev?: true;
+  /** いまの技は派生で出した（新しい技を出す・動けるようになると消える） */
+  followUp?: true;
+  /** 親の技が当たったフレームを 1 として、いま何フレーム目か（止まっていたフレームも数える）。contact が外れると消える。派生の受付 contact に使う */
+  contactAge?: number;
 }
 
 export const INITIAL_FIGHTER: FighterState = {
@@ -152,9 +158,19 @@ function moveLength(move: MoveFrames, phase: 'startup' | 'active' | 'recovery', 
   return contact ? (move.contactRecovery ?? move.recovery) : move.recovery;
 }
 
-/** 当たり・ヒットストップ・キャンセルの印（contact・hitstop・frozen・cancelTo・canceled）を外した状態 */
+/** 当たり・ヒットストップ・キャンセル・派生の印（contact・contactAge・hitstop・frozen・cancelTo・canceled・followUp）を外した状態 */
 function withoutHitMarks(state: FighterState): FighterState {
-  const { contact: _contact, hitstop: _hitstop, frozen: _frozen, cancelTo: _cancelTo, canceled: _canceled, ...rest } = state;
+  const {
+    contact: _contact,
+    contactAge: _contactAge,
+    hitstop: _hitstop,
+    frozen: _frozen,
+    cancelTo: _cancelTo,
+    canceled: _canceled,
+    followUp: _followUp,
+    followFromPrev: _followFromPrev,
+    ...rest
+  } = state;
   return rest;
 }
 
@@ -168,6 +184,50 @@ function startMove(state: FighterState, move: MoveFrames, canceled = false): Fig
     buffered: null,
     ...(canceled ? { canceled: true as const } : {}),
   };
+}
+
+/** 出している技の中の位置（0 から。発生前の 0 フレーム目が 0）。ヒットストップで止まっていたフレームは進まないので数えない */
+export function movePosition(state: FighterState): number {
+  const move = state.move;
+  if (move === null) return 0;
+  if (state.phase === 'startup') return state.frame;
+  if (state.phase === 'active') return move.startup + state.frame;
+  return move.startup + move.active + state.frame;
+}
+
+/** 派生の受付の中か。n は親の技のフレーム番号（出したフレームを 1 とする） */
+export function followWindowOpen(state: FighterState, followUp: FollowUp, n: number): boolean {
+  const w = followUp.window;
+  if (w.kind === 'frames') return n >= w.from && n <= w.to;
+  return state.contact === true && (state.contactAge ?? 0) <= w.frames;
+}
+
+/** 新しく入れた入力に合う、いまの技の派生。同じ入力が複数に合うときは、方向つき、次に同時押しを優先する。なければ undefined */
+function pickFollowUp(
+  state: FighterState,
+  history: readonly FrameInput[],
+  rules: NotationRules,
+  contactOnly = false,
+): FollowUp | undefined {
+  let best: { followUp: FollowUp; score: number } | undefined;
+  for (const followUp of state.move?.followUps ?? []) {
+    if (contactOnly && followUp.window.kind !== 'contact') continue;
+    const follow = parseFollowInput(followUp.input, rules);
+    if (follow === null || !followInputMatches(history, follow)) continue;
+    const score = (follow.dirs !== null ? 2 : 0) + (follow.chord ? 1 : 0);
+    if (best === undefined || score > best.score) best = { followUp, score };
+  }
+  return best?.followUp;
+}
+
+/** move が、いまの技（state.move）の派生の技か */
+function isFollowUpOf(state: FighterState, move: MoveFrames | undefined): boolean {
+  return move !== undefined && (state.move?.followUps?.some((f) => f.move === move) ?? false);
+}
+
+/** 派生で技を出す（startup の 0 フレーム目。canceled は付けず、followUp: true を付ける） */
+function startFollowUp(state: FighterState, move: MoveFrames): FighterState {
+  return { ...startMove(state, move), followUp: true };
 }
 
 /** move が、いまの技（state.move）のキャンセル先か */
@@ -200,6 +260,9 @@ function freeStep(state: FighterState, dir: number): FighterState {
  *   先行入力は同じように進め、残っているものがキャンセル先（move.cancels）なら cancelTo に予約する。
  *   止まり終わった最初のフレームで、予約があればその技を出す（canceled）
  * - 当たったあと（contact）、持続か硬直の 0 フレーム目になるフレームで、選ばれた技か先行入力がキャンセル先ならそのフレームから出す
+ * - 派生: 技を出している間に、その技の派生の入力が新しく押され、受付（FollowUp.window）の中なら、そのフレームから派生の技を出す
+ *   （startup の 0 フレーム目。followUp: true）。受付 frames は止まっていたフレームを数えない。ヒットストップ中の入力は予約（cancelTo）にして、
+ *   止まり終わった最初のフレームから出す。派生は、同じフレームの先行入力・キャンセルより優先する
  * - ジャンプ: prejump → air → landing。空中ではボタンを無視する（空中技は 2 段目）
  * idle・crouch のままなら同じ state を返す（描き直しを省くため）
  */
@@ -229,6 +292,15 @@ export function stepFighter(
     state = rest;
   }
 
+  // 当たってからの経過（止まっていたフレームも数える。当たったフレームが 1）
+  // 当たったフレームの stepFighter は当たりを知らないので、その次のフレームで、1 つ前のフレームの派生の押し（受付 contact だけ）も拾う
+  const justHit = state.contact === true && state.contactAge === undefined;
+  if (state.contact === true) state = { ...state, contactAge: (state.contactAge ?? 1) + 1 };
+  // 新しく入れた入力に合う派生（受付の中かは、使うところで調べる）
+  const nowFollow = state.move !== null ? pickFollowUp(state, history, rules) : undefined;
+  const prevFollow = nowFollow === undefined && justHit ? pickFollowUp(state, history.slice(0, -1), rules, true) : undefined;
+  const follow = nowFollow ?? prevFollow;
+
   // 先行入力は 1 フレームごとに古くなる。新しく選ばれたものは古いものに替える
   let buffered = state.buffered === null ? null : { move: state.buffered.move, age: state.buffered.age + 1 };
   if (buffered !== null && buffered.age > inputBuffer) buffered = null;
@@ -236,19 +308,30 @@ export function stepFighter(
 
   // ヒットストップ中: 止まる。キャンセル先は、新しく押したものを優先して予約にする
   if (state.hitstop !== undefined && state.hitstop >= 1) {
-    const { hitstop: _hitstop, ...rest } = state;
+    const { hitstop: _hitstop, followFromPrev: _followFromPrev, ...rest } = state;
     const left = state.hitstop - 1;
     const queued = buffered?.move;
-    const reserve = cancelsTo(state, fresh) ? fresh : state.cancelTo ?? (cancelsTo(state, queued) ? queued : undefined);
+    // 止まっている間は親の技のフレームが進まないので、いまの番号（位置 + 1）で受付を見る。派生の予約は、キャンセル先より優先する
+    const followNow = follow !== undefined && followWindowOpen(state, follow, movePosition(state) + 1) ? follow.move : undefined;
+    const reserve =
+      followNow ??
+      (isFollowUpOf(state, state.cancelTo)
+        ? state.cancelTo
+        : cancelsTo(state, fresh)
+          ? fresh
+          : state.cancelTo ?? (cancelsTo(state, queued) ? queued : undefined));
     return {
       ...rest,
       frozen: true,
       buffered,
       ...(left >= 1 ? { hitstop: left } : {}),
       ...(reserve ? { cancelTo: reserve } : {}),
+      ...(prevFollow !== undefined && reserve === prevFollow.move ? { followFromPrev: true as const } : state.followFromPrev === true && reserve === state.cancelTo ? { followFromPrev: true as const } : {}),
     };
   }
   if (state.cancelTo !== undefined) {
+    if (follow !== undefined && followWindowOpen(state, follow, movePosition(state) + 1)) return startFollowUp(state, follow.move);
+    if (isFollowUpOf(state, state.cancelTo)) return startFollowUp(state, state.cancelTo);
     return startMove(state, cancelsTo(state, fresh) ? fresh : state.cancelTo, true);
   }
 
@@ -279,6 +362,8 @@ export function stepFighter(
     }
   }
   if (next !== null) {
+    // 派生は、先行入力・キャンセルより優先する
+    if (follow !== undefined && followWindowOpen(next, follow, movePosition(next) + 1)) return startFollowUp(state, follow.move);
     // 当たったあとの、持続か硬直の 0 フレーム目: キャンセル先が選ばれていれば（先行入力に残っていれば）そこから出す
     const inWindow = next.contact === true && (next.phase === 'active' || (next.phase === 'recovery' && next.frame === 0));
     const queued = buffered?.move;
@@ -294,6 +379,7 @@ export function stepFighter(
 /**
  * 技の名前を、選んだ言語で「技名 (入力)」にする。
  * 必殺技・超必殺技は、キャラのデータで方向が同じで、ボタンを含む技の名前（日本語名がなければ英語名）。
+ * 派生の技は、キャラのデータの派生の名前（kind 'followUp'。親と派生の入力が合うもの）。
  * 通常技は「立ち／しゃがみ」とボタン（例: 立ち弱P、Crouching MK）。どちらにも当たらなければ入力だけ
  */
 export function moveDisplayName(move: MoveFrames, character: CharacterData, rules: NotationRules, lang: Lang): string {
@@ -303,13 +389,11 @@ export function moveDisplayName(move: MoveFrames, character: CharacterData, rule
     const posture = move.input.startsWith('2') ? 'crouch' : 'stand';
     return `${msg(lang).normalMoveName(posture, move.input.slice(1))} (${move.input})`;
   }
-  const { command, buttons } = r.input;
+  const own = r.input;
   const owner = character.moves.find((mv) =>
     mv.inputs.some((text) => {
       const p = parseStep(text, rules);
-      if (!p.ok || p.input.kind !== 'command') return false;
-      const own = p.input.buttons;
-      return p.input.command.notation === command.notation && buttons.every((b) => own.includes(b));
+      return p.ok && stepInputMatches(move.input, own, p.input);
     }),
   );
   return owner ? `${pick(owner.name, lang)} (${move.input})` : move.input;

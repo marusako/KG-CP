@@ -1,8 +1,8 @@
 import type { FighterState } from './fighter';
 import type { MoveFrames } from './frameData';
-import { parseStep } from './notation';
+import { parseStep, stepInputMatches } from './notation';
 import type { NotationRules } from './notation';
-import type { CommandDef } from './types';
+import type { PracticeDef } from './types';
 
 /** コマンド練習の試しで、キャラが実際に出した技（または出なかったこと） */
 export type MoveOutcome =
@@ -60,10 +60,15 @@ export function stepMoveOutcome(
   return { state, outcome: null };
 }
 
-/** 技（フレームデータ）が、コマンド練習で選んだ技（CommandDef）に当たるか */
-export function moveMatchesCommand(move: MoveFrames, command: CommandDef, rules: NotationRules): boolean {
+/** 技（フレームデータ）が、コマンド練習で選んだ技（PracticeDef）に当たるか。派生の項目は、派生の技（236LP>K など）が当たる */
+export function moveMatchesCommand(move: MoveFrames, command: PracticeDef, rules: NotationRules): boolean {
   const r = parseStep(move.input, rules);
-  if (!r.ok || r.input.kind !== 'command') return false;
+  if (!r.ok) return false;
+  if (command.kind === 'followUp') {
+    const wide = parseStep(command.notation, rules);
+    return wide.ok && stepInputMatches(move.input, r.input, wide.input);
+  }
+  if (r.input.kind !== 'command') return false;
   const { command: own, buttons } = r.input;
   return own.notation === command.notation && buttons.every((b) => command.buttons.includes(b));
 }

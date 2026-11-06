@@ -32,7 +32,7 @@
 // ヒットストップ・キャンセル（第14段階）: 確認日 2026-11-06。
 // - スト6: FAT の `hitstop`（ヒットストップ）、`xx`（キャンセル先。`ch` チェーン・`sp` 必殺技・`su` SA）、
 //   チェーンの先は `extraInfo` の「Chains into stand LP / crouch LP / crouch LK」から技の入力（5LP・2LP・2LK）を手で書く。
-//   `tc`（ターゲットコンボ）は入れない。ヒットストップは 1 段目の値（多段は `5*5*5*5*13` の最初の 5、`12(13)` は括弧の外の 12）。
+//   `tc`（ターゲットコンボ）は cancels でなく followUps に書く（下の「派生技」）。ヒットストップは 1 段目の値（多段は `5*5*5*5*13` の最初の 5、`12(13)` は括弧の外の 12）。
 //   FAT のヒットストップは技ごとに 1 つなので、このアプリはヒットでもガードでも同じ値を使う（このアプリの決め。ガードで違うかは確かめていない）
 // - GG: FAT にヒットストップの数はなく、`gatling`（ガトリング）と `xx`（`sp`・`su`）、`atkLvl`（攻撃レベル）がある。
 //   ヒットストップは攻撃レベルで決まり、Dustloop の表の Lv0 = 11・Lv4 = 15 は検索結果の抜粋で確認した（ページは読み込みを断られた）。
@@ -43,8 +43,21 @@
 //   チェーン・ガトリング・SA キャンセルも同じ窓にする（推測）
 // - ヒットストップを持つ技は、反応のデータ（onHit か onBlock）がある技。反応のデータがなく当たらない技には入れない
 //
-// 入れない技: キャミィの Hooligan Combination（発生が決まらない）と Cannon Strike（空中技）。
-// ブリジットの 214S・214HS（持続が書かれていない）、214K（発生が決まらない）、j.236K（空中技）、632146HS（数が書かれていない）
+// 派生技（第17段階）: 確認日 2026-11-06。FAT の値を手で写した。
+// - 受付のうち、FAT に書かれているのはキャミィ 236P の「20〜40 フレーム目に派生を受け付ける」と、5HP の `hcWinTc`（当たってから 19F）だけ。
+//   ブリジット 236K の派生（236K~P・236K~K）の受付は FAT にも検索にも見つからなかったので、236K の持続の間（10〜34 フレーム目）にした（推測）
+// - ブリジット 236K~P・236K~K のヒットは FAT に数字がなく `KD` だけなので入れない（ガードだけ）。ヒットストップは GG の攻撃レベル 2 の 13（上の推測の表）
+// - キャミィ 5HP>HK: 発生 13・持続 `4(12)3` は 4 + 12 + 3 を足して 19、硬直 29。ヒットストップは 1 段目の 11（FAT は `11*13`）
+// - キャミィ 236P（フーリガン）は、派生を入れないとレイザーエッジスライサーが出る（FAT の補足）ので、236LP・236MP・236HP そのものの数字にする
+//   （発生 50・持続 9・硬直 13、ヒット KD +48、ガード +2、ヒットストップ 13、キャンセル先 su3）。派生を入れると、そこで親の技から派生の技に切り替わる
+// - キャノンストライク（236P>K）: 持続は FAT に「着地まで」とあるだけで数がないので 10（推測）。ヒット・ガードは括弧つきで 1 つに決まらないので入れない
+// - リバースエッジ（236P>2K）: ヒット・ガードは括弧つきで入れない
+// - ファタルレッグツイスター（236P>LP+LK）: 投げ。ヒット KD +18。硬直は `30(38)` の括弧の外
+// - サイレントステップ（236P>P）: 攻撃なし。発生 20 は 236P を出してからの値で、入れたフレームからの値が FAT にないので、発生前 1・持続 1 は推測。硬直は `14(22)` の括弧の外
+// - 236LP・236MP・236HP は FAT の `sp`（必殺技すべて）にあたるので、キャミィの必殺技のキャンセル先に足す（第14段階で入れなかったのは、236P がデータになかったため）
+// - フーリガンの派生は 236LP・236MP・236HP のどれにも同じ 4 つを付ける。FAT は 236P でまとめて書いている（強さで軌道が違う補足があるが、位置を持たないので同じにした）
+//
+// 入れない技: ブリジットの 214S・214HS（持続が書かれていない）、214K（発生が決まらない）、j.236K（空中技）、632146HS（数が書かれていない）
 
 /** ヒット時の有利。数ならその場で硬直、knockdown ならダウン（ダウン後の有利） */
 export type HitAdvantage = number | { readonly knockdown: number };
@@ -66,6 +79,24 @@ export interface MoveFrames {
   hitstop?: number;
   /** キャンセルできる先の技の入力（例: ['5LP', '2LP', '2LK', '236LK', …]）。キャンセルできない技は書かない */
   cancels?: readonly string[];
+  /** 派生。ない技は書かない */
+  followUps?: readonly FollowUp[];
+  /** 投げ。相手がガードでも当たる（反応はヒットの値を使う） */
+  throw?: true;
+  /** 攻撃の判定がない（サイレントステップなど）。持続の 1 フレーム目に相手に当たらない */
+  noHitbox?: true;
+}
+
+export interface FollowUp {
+  /** 親の技のあとに入れるもの。ボタン（例: 'P'、'HK'、'LPLK' は同時押し）と、要るなら方向（例: '2K'） */
+  input: string;
+  /**
+   * 受付。'frames' は親の技を出したフレームを 1 として [from, to] フレーム目の間。
+   * 'contact' は親の技が当たったフレームから frames フレームの間（ヒットストップを含む）。当たらなければ受け付けない
+   */
+  window: { kind: 'frames'; from: number; to: number } | { kind: 'contact'; frames: number };
+  /** 派生の技。input は「親の入力 + 区切り + 派生の入力」（例: '236K~P'、'5HP>HK'、'236LP>K'） */
+  move: MoveFrames;
 }
 
 export interface FighterData {
@@ -80,7 +111,7 @@ const m = (
   startup: number,
   active: number,
   recovery: number,
-  extra: Partial<Pick<MoveFrames, 'contactRecovery' | 'onHit' | 'onBlock' | 'hitstop' | 'cancels'>> = {},
+  extra: Partial<Pick<MoveFrames, 'contactRecovery' | 'onHit' | 'onBlock' | 'hitstop' | 'cancels' | 'followUps' | 'throw' | 'noHitbox'>> = {},
 ): MoveFrames => ({
   input,
   startup,
@@ -92,9 +123,28 @@ const m = (
 const kd = (n: number): HitAdvantage => ({ knockdown: n });
 
 const CAMMY_CHAIN = ['5LP', '2LP', '2LK'];
-const CAMMY_SPECIAL = ['236LK', '236MK', '236HK', '623LK', '623MK', '623HK', '214LP', '214MP', '214HP'];
+const CAMMY_SPECIAL = ['236LK', '236MK', '236HK', '623LK', '623MK', '623HK', '214LP', '214MP', '214HP', '236LP', '236MP', '236HP'];
 const CAMMY_SA = ['236236K', '214214P', '236236P'];
 const CAMMY_TO_SPECIAL = [...CAMMY_SPECIAL, ...CAMMY_SA];
+
+/** フーリガンの派生は、236LP・236MP・236HP のどれにも同じ（受付は 20〜40 フレーム目） */
+const hooliganFollowUps = (parent: string): FollowUp[] => {
+  const window = { kind: 'frames', from: 20, to: 40 } as const;
+  return [
+    // キャノンストライク。持続 10 は推測
+    { input: 'K', window, move: m(`${parent}>K`, 12, 10, 12, { hitstop: 13 }) },
+    // リバースエッジ
+    { input: '2K', window, move: m(`${parent}>2K`, 17, 4, 13, { hitstop: 13 }) },
+    // ファタルレッグツイスター（投げ）
+    { input: 'LPLK', window, move: m(`${parent}>LPLK`, 9, 3, 30, { onHit: kd(18), throw: true }) },
+    // サイレントステップ（攻撃なし）。発生前 1・持続 1 は推測
+    { input: 'P', window, move: m(`${parent}>P`, 1, 1, 14, { noHitbox: true }) },
+  ];
+};
+
+/** レイザーエッジスライサー（派生を入れないときに出る）の数字を親の技にする */
+const hooligan = (input: string): MoveFrames =>
+  m(input, 49, 9, 13, { onHit: kd(48), onBlock: 2, hitstop: 13, cancels: ['236236P'], followUps: hooliganFollowUps(input) });
 
 /** キャミィ（スト6）。歩きの速さは画面の都合で決める（FAT の値は単位が分からないので使わない） */
 const CAMMY: FighterData = {
@@ -104,7 +154,20 @@ const CAMMY: FighterData = {
   moves: [
     m('5LP', 3, 3, 7, { onHit: 5, onBlock: -2, hitstop: 9, cancels: [...CAMMY_CHAIN, ...CAMMY_TO_SPECIAL] }),
     m('5MP', 5, 4, 13, { onHit: 6, onBlock: -1, hitstop: 11 }),
-    m('5HP', 7, 3, 20, { onHit: 2, onBlock: -3, hitstop: 13, cancels: CAMMY_TO_SPECIAL }),
+    m('5HP', 7, 3, 20, {
+      onHit: 2,
+      onBlock: -3,
+      hitstop: 13,
+      cancels: CAMMY_TO_SPECIAL,
+      // スイングコンビネーション。受付は FAT の hcWinTc（当たってから 19F）
+      followUps: [
+        {
+          input: 'HK',
+          window: { kind: 'contact', frames: 19 },
+          move: m('5HP>HK', 12, 19, 29, { onHit: kd(26), onBlock: -12, hitstop: 11, cancels: CAMMY_TO_SPECIAL }),
+        },
+      ],
+    }),
     m('5LK', 4, 3, 10, { onHit: 2, onBlock: -3, hitstop: 9, cancels: CAMMY_TO_SPECIAL }),
     m('5MK', 7, 3, 18, { onHit: 3, onBlock: -4, hitstop: 11 }),
     m('5HK', 10, 3, 21, { contactRecovery: 19, onHit: 2, onBlock: -3, hitstop: 13 }),
@@ -117,6 +180,9 @@ const CAMMY: FighterData = {
     m('236LK', 8, 13, 21),
     m('236MK', 8, 15, 21),
     m('236HK', 14, 16, 21, { cancels: ['236236P'] }),
+    hooligan('236LP'),
+    hooligan('236MP'),
+    hooligan('236HP'),
     m('623LK', 4, 12, 40, { onHit: kd(20), onBlock: -36, hitstop: 12, cancels: ['236236P'] }),
     m('623MK', 5, 12, 41, { onHit: kd(21), onBlock: -36, hitstop: 12, cancels: ['236236P'] }),
     m('623HK', 6, 12, 44, { onHit: kd(22), onBlock: -36, hitstop: 12, cancels: ['236236P'] }),
@@ -149,7 +215,16 @@ const BRIDGET: FighterData = {
     m('2S', 10, 6, 20, { onHit: -6, onBlock: -9, hitstop: 13, cancels: ['5HS', '2HS', ...BRIDGET_TO_SPECIAL] }),
     m('2HS', 10, 11, 24, { onHit: -15, onBlock: -18, hitstop: 14, cancels: BRIDGET_TO_SPECIAL }),
     m('2D', 12, 4, 15, { onBlock: -6, hitstop: 13, cancels: BRIDGET_TO_SPECIAL }),
-    m('236K', 9, 25, 9, { onHit: -17, onBlock: -20, hitstop: 13 }),
+    m('236K', 9, 25, 9, {
+      onHit: -17,
+      onBlock: -20,
+      hitstop: 13,
+      // キックスタート マイ ハートの停止（P）・発射（K）。受付は 236K の持続の間（10〜34 フレーム目。推測）、ヒットストップ 13 は攻撃レベル 2（推測）
+      followUps: [
+        { input: 'P', window: { kind: 'frames', from: 10, to: 34 }, move: m('236K~P', 6, 7, 19, { onBlock: -6, hitstop: 13 }) },
+        { input: 'K', window: { kind: 'frames', from: 10, to: 34 }, move: m('236K~K', 2, 20, 24, { onBlock: -33, hitstop: 13 }) },
+      ],
+    }),
     m('236S', 14, 21, 3),
     m('236HS', 14, 21, 3),
     // スターシップ: FAT と wikiwiki のフレーム表は発生 9F。wikiwiki のコマンド技のページには「Ver2.03 で発生 10F→7F」とあり、食い違う（未確認）
@@ -167,6 +242,19 @@ export function fighterDataFor(characterId: string): FighterData | undefined {
   return FIGHTER_DATA.find((d) => d.characterId === characterId);
 }
 
+/** 派生の技 → 親の技と派生。データの全部の派生を最初に 1 回だけ登録する */
+const FOLLOW_UP_LINKS = new WeakMap<MoveFrames, { parent: MoveFrames; followUp: FollowUp }>();
+for (const data of FIGHTER_DATA) {
+  for (const parent of data.moves) {
+    for (const followUp of parent.followUps ?? []) FOLLOW_UP_LINKS.set(followUp.move, { parent, followUp });
+  }
+}
+
+/** 派生の技なら、その親の技と派生の定義。派生の技でなければ undefined */
+export function followUpLink(move: MoveFrames): { parent: MoveFrames; followUp: FollowUp } | undefined {
+  return FOLLOW_UP_LINKS.get(move);
+}
+
 /** 技の全体のフレーム数（発生前 + 持続 + 硬直。FAT の全体と同じ） */
 export function totalFrames(move: MoveFrames): number {
   return move.startup + move.active + move.recovery;
@@ -182,8 +270,10 @@ export interface Reaction {
   advantage: number;
 }
 
-/** その切り替えで技が当たったときの相手の反応。データがなければ null */
+/** その切り替えで技が当たったときの相手の反応。データがなければ null。投げは切り替えによらずヒット */
 export function contactReaction(move: MoveFrames, mode: DummyMode): Reaction | null {
+  // 投げは相手がガードでも当たる（ヒットの反応）
+  if (move.throw === true) mode = 'hit';
   const recovery = move.contactRecovery ?? move.recovery;
   if (mode === 'block') {
     if (move.onBlock === undefined) return null;
